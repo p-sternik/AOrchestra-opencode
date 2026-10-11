@@ -1,0 +1,20 @@
+{
+  "name": "aorchestra-opencode-v2",
+  "version": "0.2.2",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "bun test ./tests",
+    "typecheck": "tsc --noEmit",
+    "check": "bun scripts/check.ts",
+    "report": "bun scripts/report.ts",
+    "eval:check": "bun scripts/eval.ts check",
+    "eval:run": "bun scripts/eval.ts run"
+  },
+  "devDependencies": {
+    "@opencode/client": "2.0.26",
+    "@opencode/plugin": "2.0.26",
+    "@types/bun": "1.2.15",
+    "typescript": "5.9.3"
+  }
+}

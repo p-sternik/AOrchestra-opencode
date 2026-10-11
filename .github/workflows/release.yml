@@ -1,0 +1,38 @@
+name: Release
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: release-main
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  validate-main:
+    uses: ./.github/workflows/validate.yml
+  release:
+    needs: validate-main
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+    outputs:
+      pr-number: ${{ steps.release.outputs.pr && fromJSON(steps.release.outputs.pr).number }}
+    steps:
+      - uses: googleapis/release-please-action@8b8fd2cc23b2e18957157a9d923d75aa0c6f6ad5 # v4
+        id: release
+        with:
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+  validate-release-pr:
+    needs: release
+    if: ${{ needs.release.outputs.pr-number != '' }}
+    uses: ./.github/workflows/validate.yml
+    with:
+      ref: refs/pull/${{ needs.release.outputs.pr-number }}/head

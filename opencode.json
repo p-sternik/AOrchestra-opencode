@@ -1,0 +1,52 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "default_agent": "aorchestra",
+  "model": "github-copilot/gpt-5.6-terra",
+  "plugins": [
+    "*",
+    "-opencode.config.skill",
+    { "package": "./plugins/aorchestra", "options": {
+      "models": { "fast": "github-copilot/gpt-5.6-luna", "balanced": "github-copilot/gpt-5.6-terra", "strong": "github-copilot/gpt-5.6-sol" },
+      "maxDelegations": 8, "maxAttempts": 2, "timeoutMs": 600000,
+      "maxSessionTokens": 300000, "snapshotIgnore": [], "telemetry": true
+    } }
+  ],
+  "agents": {
+    "aorchestra": {
+      "description": "Own brownfield outcomes, perform cohesive work directly, delegate settled bounded tasks.",
+      "mode": "primary", "steps": 30,
+      "system": "{file:./instructions/aorchestra.md}",
+      "permissions": [
+        { "action": "*", "resource": "*", "effect": "ask" },
+        { "action": "read", "resource": "*", "effect": "allow" },
+        { "action": "grep", "resource": "*", "effect": "allow" },
+        { "action": "glob", "resource": "*", "effect": "allow" },
+        { "action": "edit", "resource": "*", "effect": "allow" },
+        { "action": "webfetch", "resource": "*", "effect": "allow" },
+        { "action": "websearch", "resource": "*", "effect": "allow" },
+        { "action": "question", "resource": "*", "effect": "allow" },
+        { "action": "skill", "resource": "*", "effect": "deny" },
+        { "action": "skill", "resource": "repo-context", "effect": "allow" },
+        { "action": "aorchestra_task", "resource": "*", "effect": "allow" },
+        { "action": "aorchestra_delegate", "resource": "*", "effect": "allow" },
+        { "action": "subagent", "resource": "*", "effect": "deny" },
+        { "action": "read", "resource": "*.env*", "effect": "ask" },
+        { "action": "read", "resource": "*.key", "effect": "deny" },
+        { "action": "read", "resource": "*.pem", "effect": "deny" },
+        { "action": "edit", "resource": ".opencode/*", "effect": "ask" },
+        { "action": "shell", "resource": "*", "effect": "ask" },
+        { "action": "shell", "resource": "git push *", "effect": "deny" },
+        { "action": "external_directory", "resource": "*", "effect": "ask" }
+      ]
+    },
+    "aorchestra-executor": {
+      "description": "Run a persisted, bounded AOrchestra contract. Native session permissions specify its capabilities.",
+      "mode": "subagent", "steps": 24,
+      "system": "{file:./instructions/aorchestra-executor.md}",
+      "permissions": [ { "action": "*", "resource": "*", "effect": "deny" } ]
+    }
+  },
+  "tool_output": { "max_lines": 300, "max_bytes": 12000 },
+  "compaction": { "auto": true, "keep": { "tokens": 15000 }, "buffer": 20000 },
+  "warming": false
+}

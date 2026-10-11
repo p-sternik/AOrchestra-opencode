@@ -1,0 +1,38 @@
+{
+  "version": 1,
+  "cases": [
+    {
+      "id": "legacy-zero-default",
+      "task": "Fix fee() so an explicit zero rate is respected. Preserve the default rate of 0.2 when omitted and retain the existing fee export. Add or update a focused regression test. Work only in fee.js and fee.test.js. Verify the change.",
+      "files": {
+        "package.json": "{\"type\":\"module\"}\n",
+        "fee.js": "export function fee(amount, rate) { return amount * (rate || 0.2); }\n",
+        "fee.test.js": "import assert from 'node:assert/strict'; import {fee} from './fee.js'; assert.equal(fee(100),20);\n"
+      },
+      "allowedChanges": ["fee.js", "fee.test.js"],
+      "assertions": "const {fee}=await import('./fee.js'); assert.equal(fee(100,0),0); assert.equal(fee(100),20); assert.equal(fee(100,0.1),10); assert.equal(fee(0,0),0);"
+    },
+    {
+      "id": "legacy-return-contract",
+      "task": "findUser() currently throws for a missing user because it dereferences undefined. Return null for a missing user, preserve the existing successful return shape, and do not mutate records. Add a focused test. Work only in users.js and users.test.js. Verify the change.",
+      "files": {
+        "package.json": "{\"type\":\"module\"}\n",
+        "users.js": "export function findUser(users,id) { const u=users.find(u=>u.id===id); return {id:u.id,name:u.name}; }\n",
+        "users.test.js": "import assert from 'node:assert/strict'; import {findUser} from './users.js'; assert.deepEqual(findUser([{id:1,name:'A'}],1),{id:1,name:'A'});\n"
+      },
+      "allowedChanges": ["users.js", "users.test.js"],
+      "assertions": "const {findUser}=await import('./users.js'); const rows=[{id:1,name:'A',secret:'x'}]; assert.equal(findUser(rows,2),null); assert.deepEqual(findUser(rows,1),{id:1,name:'A'}); assert.deepEqual(rows,[{id:1,name:'A',secret:'x'}]); assert.equal(findUser([],1),null);"
+    },
+    {
+      "id": "legacy-string-consumer",
+      "task": "nextVersion() concatenates when given a numeric string, but a legacy consumer sends versions as strings. Make both numeric and numeric-string inputs increment numerically, retaining the export and existing numeric behavior. Add a regression test. Work only in version.js and version.test.js. Verify the change.",
+      "files": {
+        "package.json": "{\"type\":\"module\"}\n",
+        "version.js": "export const nextVersion = value => value + 1;\n",
+        "version.test.js": "import assert from 'node:assert/strict'; import {nextVersion} from './version.js'; assert.equal(nextVersion(1),2);\n"
+      },
+      "allowedChanges": ["version.js", "version.test.js"],
+      "assertions": "const {nextVersion}=await import('./version.js'); assert.equal(nextVersion('9'),10); assert.equal(nextVersion(9),10); assert.equal(nextVersion('0'),1); assert.equal(nextVersion(0),1);"
+    }
+  ]
+}
