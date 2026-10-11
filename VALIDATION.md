@@ -28,6 +28,28 @@ from the private server environment. The check requires global agent and plugin
 declarations; loading the template locally is insufficient. Tests use an isolated
 database and make zero model calls. This mode is not part of the original 0.2.2 tag.
 
+## Installable package (development branch)
+
+Current local checks: **45 harness/setup tests passed**, 130 assertions, plus
+**13 repo-context helper tests passed**. Typecheck, package validation and the
+repository-profile native smoke check also passed.
+
+Setup adds behavioral checks for JSONC/comment preservation, unrelated settings,
+idempotent updates, native-identified source migration, bundled skill permission
+migration, exact backups and concurrent config changes. Package validation packs
+an actual archive, installs production dependencies outside the checkout, imports
+the plugin and invokes its CLI. CI runs the package check on Windows/Linux.
+
+The native installation was exercised with an isolated Git package fixture and
+global JSONC configuration, using native plugin add and then global smoke checking
+with zero model calls. The bundle uses the ID aorchestra-repo-context and preserves
+other skill discovery. This does not prove provider inference or every third-party
+configuration. npm registry publication has not been performed.
+
+The packaged Node/Bun CLI was exercised outside the source checkout. Repeating
+setup against the same pinned source returned changed=false, no new backup, and
+a successful global check. A separately installed repo-context remained present.
+
 ## What these checks establish
 
 Tests cover scope drift, stale evidence, verifier predicates, attempt escalation,

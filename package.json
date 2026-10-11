@@ -1,20 +1,31 @@
 {
   "name": "aorchestra-opencode-v2",
   "version": "0.2.2",
-  "private": true,
   "type": "module",
+  "description": "A brownfield harness for OpenCode V2 with selective delegation and global setup.",
+  "repository": { "type": "git", "url": "git+https://github.com/p-sternik/AOrchestra-opencode.git" },
+  "homepage": "https://github.com/p-sternik/AOrchestra-opencode#readme",
+  "bin": { "aorchestra": "./bin/aorchestra.mjs" },
+  "exports": { ".": "./plugins/aorchestra.ts", "./server": "./plugins/aorchestra.ts" },
+  "files": ["bin", "lib", "plugins", "scripts/cli.ts", "scripts/check.ts", "scripts/runtime.ts", "scripts/report.ts", "instructions", "skills/repo-context", "opencode.json", "README.md", "docs", "VALIDATION.md", "RESEARCH.md", "CHANGELOG.md", "CONTRIBUTING.md", "AGENTS.md"],
+  "engines": { "node": ">=22" },
   "scripts": {
     "test": "bun test ./tests",
     "typecheck": "tsc --noEmit",
+    "pack:check": "bun scripts/package-check.ts",
     "check": "bun scripts/check.ts",
     "report": "bun scripts/report.ts",
     "eval:check": "bun scripts/eval.ts check",
     "eval:run": "bun scripts/eval.ts run"
   },
   "devDependencies": {
-    "@opencode/client": "2.0.26",
-    "@opencode/plugin": "2.0.26",
     "@types/bun": "1.2.15",
     "typescript": "5.9.3"
+  },
+  "dependencies": {
+    "@opencode/client": "2.0.26",
+    "@opencode/plugin": "2.0.26",
+    "@opencode/util": "2.0.26",
+    "jsonc-parser": "3.3.1"
   }
 }

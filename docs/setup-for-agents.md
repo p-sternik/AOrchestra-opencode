@@ -1,132 +1,83 @@
-# Install AOrchestra globally with a coding agent
+# Set up AOrchestra with a coding agent
 
-Use this procedure when the user asks to install or configure AOrchestra for
-OpenCode V2. The default is a merge into the user's global configuration, available
-across projects. For harness development, follow [AGENTS.md](../AGENTS.md).
+Use this procedure for global installation/configuration. Prefer the packaged CLI;
+do not recreate its installer or copy files into a target project. Harness
+development follows [AGENTS.md](../AGENTS.md).
 
-## 1. Find the active global configuration
+## 1. Establish the environment
 
-Identify the OS, shell and V2 executable: try `opencode2`, or use `opencode` when
-that is V2. Verify its version against the [README prerequisites](../README.md#1-check-the-prerequisites).
-Run `<binary> debug paths` and inspect `OPENCODE_CONFIG_DIR` (a global directory
-override), `OPENCODE_CONFIG`, `OPENCODE_CONFIG_CONTENT` and XDG config settings.
-Keep the user's other executable/profile available.
+Identify the OS/shell, V2 executable and prerequisites in the
+[README](../README.md#1-check-the-prerequisites). Verify the binary reports 2.0.26;
+set OPENCODE_BIN if it is named opencode rather than opencode2. Resolve missing
+prerequisites within the user's authorized scope. Provider sign-in may require
+their interaction; never request credential contents.
 
-The usual directory is ~/.config/opencode, including on Windows, but discovered
-runtime paths take precedence over guesses about HOME or APPDATA. Inspect the
-existing opencode.json and opencode.jsonc there. In 2.0.26 JSONC loads after JSON;
-update the authoritative existing file rather than creating a competing file.
-If neither exists, create opencode.json in that global directory. Read JSONC with
-a parser/editor that preserves comments and unrelated content.
+Run `<binary> debug paths` and inspect OPENCODE_CONFIG_DIR, OPENCODE_CONFIG,
+OPENCODE_CONFIG_CONTENT and XDG config overrides. A target project is optional for
+global installation. Keep unrelated project/global settings and instructions.
 
-`<binary> debug config` lists loaded sources when a service connection is available.
-If it cannot connect, inspect the files and use the private global check below;
-do not change a managed service's port just to complete setup. Never print
-credentials or expanded config containing secrets. Inspect CLI help for unfamiliar
-options. Resolve missing prerequisites within the user's authorized scope;
-provider sign-in may require their interaction.
+**Done when:** the supported binary and required tools are available, active global
+paths/overrides are known, and any provider interaction needed is identified.
 
-**Done when:** the supported V2 binary, permanent install directory, global config
-directory/file and relevant overrides are known. A target project is optional for
-global installation, needed only for checking project-specific overrides.
+## 2. Run packaged setup
 
-## 2. Install the harness in a permanent location
+Use the README's GitHub command or the exact package/revision requested by the
+user. npm registry publication is not yet available. For a non-interactive agent,
+provide `--model=provider/model`, using an observed model identifier from the
+existing configuration/catalogue. Use explicit tier flags only when requested;
+otherwise setup retains available tier choices or uses the main model for all tiers.
+Use `--default` only to replace an existing chosen default agent.
 
-Use the requested version or verify the latest published GitHub release/tag.
-Until a release includes the global checker, use current main for this workflow
-and record its exact commit. Respect an explicit request to retain an older release,
-but report the validation limitation below.
-Follow the [download steps](../README.md#2-download-the-harness). Reuse a
-suitable checkout after inspecting its version/local changes; preserve edits.
-Install dependencies with `npm ci --ignore-scripts`.
+The CLI discovers global JSON/JSONC, selects JSONC if present, validates input,
+installs through native plugin add, backs up a changed config and merges only
+AOrchestra entries. It pins the default GitHub source to a commit, embeds the
+installed instructions into agent definitions and runs the no-inference global
+check. The skill's native ID is aorchestra-repo-context; other skill discovery is
+preserved. Existing explicit skill-discovery exclusions remain user settings.
 
-Keep the checkout outside target projects, at a stable user-owned path. Record
-its revision and version. Back up the existing global config before merging,
-or record that the file is newly created. Do not copy the harness's AGENTS.md into
-the global config directory or target repositories.
+Inspect the exit status and output. If both global sources contain conflicting
+AOrchestra registrations, resolve that specific conflict before retrying. If a
+config changes concurrently, re-read it rather than overwriting it. A failed
+post-install check leaves the backed-up change visible; diagnose its specific
+error, rather than assuming success or weakening permissions.
 
-**Done when:** installed files/dependencies exist at the permanent location and
-the previous global config can be recovered without losing later unrelated edits.
+**Done when:** the global check passes, prints global-discovery and modelCalls: 0,
+and the installed spec/revision, config path and any backup are recorded. Provider
+inference remains untested. Use the manual fallback below only when explicitly
+requested or needed to diagnose an installation problem.
 
-## 3. Merge AOrchestra into the global config
+## 3. Verify usage and hand off
 
-Treat the checkout's opencode.json as a template, not a replacement for the global
-file. Preserve providers, other agents/plugins, permissions, model defaults,
-compaction, warming and tool-output settings unless a relevant change is requested.
+Use `aorchestra check --project=<absolute path>` through the same packaged CLI if
+the user requests a project-specific check. Project-local config can override the
+global setup. Restore/remove stale template environment overrides as appropriate,
+preserving intentional overrides and explaining their effect.
 
-- Merge the AOrchestra plugin entry/options and the two agents, replacing only old
-  AOrchestra entries. Preserve unrelated plugin entries and their order. The local
-  plugin target is the absolute `<install>/plugins/aorchestra` directory.
-- Rewrite both agent `system` file references to absolute instruction paths in
-  that checkout. Relative paths copied from the template would resolve against
-  the global config directory, not the install directory. Forward-slash Windows
-  paths avoid JSON backslash mistakes.
-- Inspect available models with `<binary> models --standalone`. Use observed exact
-  identifiers for fast/balanced/strong and set `agents.aorchestra.model` explicitly.
-  Retain the existing top-level model for other agents. One suitable model can fill
-  all tiers, with no tier-based price differentiation. Catalogue availability is
-  separate from authenticated inference.
-- Set `default_agent` to `aorchestra` when the user wants it as the default; explicit
-  `--agent aorchestra` works with an existing different default.
-- Preserve the AOrchestra agent permissions and worker restrictions. Skill access
-  remains restricted for the main agent. Do not blindly copy the template's
-  `-opencode.config.skill` exclusion: globally it disables skill discovery for
-  other agents too. Preserve existing skill discovery; if a same-ID repo-context
-  registration conflicts with the bundle, resolve that specific conflict. Ask
-  only when resolving it would change a separate setup the user wants to retain.
+Return the version/spec, global config/backup paths, selected models and observed
+results. Provide commands to enter the user's project and run
+`<binary> run --standalone --agent aorchestra '<user task>'`, without assigning a
+project profile. Setup does not authorize running a real coding task or paid trial.
+For undo, restore only AOrchestra-related changes from the backup while preserving
+later unrelated edits. Updates use setup again with the requested package/revision.
 
-Check existing AOrchestra registrations in global discovery and known project-local
-configs. Keep one active plugin registration per effective location; do not remove
-unrelated project config. Inspect [reference.md](reference.md) for contract/API
-details. Restore or remove a stale OPENCODE_CONFIG template override as appropriate;
-do not install a persistent override pointing to the harness template. Report
-intentional overrides that can supersede global settings.
+**Done when:** runnable commands use the user's real shell/path, global loading is
+verified, remaining limits are clear and the user can undo or update the setup.
 
-**Done when:** valid global JSON/JSONC references the installed plugin and both
-instructions, contains observed model identifiers, and retains unrelated settings.
-Any duplicate registration, conflicting skill or relevant override is resolved.
+## Manual fallback
 
-## 4. Check actual global loading
+Read [reference.md](reference.md#global-installation). Discover the active global
+directory through the runtime, including OPENCODE_CONFIG_DIR. Inspect global
+opencode.json/jsonc with a comment-preserving editor; JSONC loads after JSON in
+2.0.26. Back up the file before editing. If absent, create global opencode.json.
 
-From a checkout supporting this mode, set `OPENCODE_BIN` to the V2 binary and run
-`bun run check -- --global`. Set `AORCHESTRA_CHECK_PROJECT` to an existing project's
-absolute path when checking its overrides; otherwise the checker uses a neutral
-directory outside the template's config discovery path.
+Install the plugin with native `plugin add <npm-or-git-spec>`, then merge its options
+and two agent definitions from the same package version. Embed its instruction
+contents, or use absolute paths only for a permanent source checkout. Set
+agents.aorchestra.model rather than replacing the global model used by other
+agents. Keep the budgets, permissions and other agents/providers/plugins. One
+available model can fill all tiers. Check duplicate registrations and stale
+environment overrides. Never copy the template's entire config over the user's.
 
-This check removes explicit config/content overrides in its private child process,
-uses normal global discovery and an isolated test DB, and verifies global agent
-declarations plus active plugin, native session, bundled skill and failure telemetry.
-Inspect exit status/output, including `configMode: global-discovery` and
-`modelCalls: 0`. It does not validate successful model inference or compatibility
-with every project. If the check fails, diagnose the specific conflict while
-retaining existing permissions.
-
-The original 0.2.2 checker lacks --global. Its template check is not evidence of
-global installation. For an explicitly requested older release, verify loaded
-sources/plugin/agents through the native API instead, or report that global loading
-has not been verified. Do not claim the new check was run against that release.
-Restore temporary terminal variables afterwards.
-
-**Done when:** global discovery succeeds from a neutral directory and, if requested,
-the chosen project, with zero model calls. Remaining authentication/inference
-limits are stated. A real-model trial is run only when requested.
-
-## 5. Hand off normal usage and recovery
-
-Return the installed version/revision/path, global config and backup paths, V2
-binary/runtime version, selected models and observed checks. Provide shell-correct
-commands using the user's project path:
-
-```text
-<change directory to project>
-<binary> run --standalone --agent aorchestra '<user task>'
-```
-
-No project config or OPENCODE_CONFIG assignment is required. Explain any relevant
-project overrides. For undo, restore the AOrchestra-related changes from the backup
-while preserving subsequent unrelated edits; restore the previous default agent
-and any environment changes. Keep the referenced install directory until the
-global plugin/instruction references are removed.
-
-**Done when:** the user can run AOrchestra from projects through the global config,
-understands observed checks/remaining gaps and can undo the installation.
+Use the packaged global check to validate actual loading. The original 0.2.2
+release predates this installer/check mode; its template smoke check is not proof
+of global installation. Do not claim a check that was not observed.

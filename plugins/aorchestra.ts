@@ -2,7 +2,7 @@ import { Plugin, Model, Skill } from '@opencode/plugin';
 import { readFile, realpath } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { resolve } from 'node:path';
-import { Ledger, parseResult, permissionRules, ready, registerTask, reserve, taskById, validateTools, verifierPassed, type Contract, type Task, type Tier } from '../lib/core';
+import { BUNDLED_SKILL_ID, Ledger, parseResult, permissionRules, ready, registerTask, reserve, taskById, validateTools, verifierPassed, type Contract, type Task, type Tier } from '../lib/core';
 import { canonicalTarget, changedPaths, fingerprint, snapshot } from '../lib/files';
 import { Telemetry, counters, metricsRpc } from '../lib/telemetry';
 
@@ -33,7 +33,7 @@ export default Plugin.define({
     const skillText = await readFile(skillPath, 'utf8');
     const description = /^description: (.+)$/m.exec(skillText)?.[1];
     const content = skillText.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n/, '');
-    await ctx.skill.transform(editor => editor.add({ id: 'repo-context', name: 'repo-context', path: skillPath, description: description ? JSON.parse(description) : undefined, content, autoinvoke: false } as Skill.Info));
+    await ctx.skill.transform(editor => editor.add({ id: BUNDLED_SKILL_ID, name: BUNDLED_SKILL_ID, path: skillPath, description: description ? JSON.parse(description) : undefined, content, autoinvoke: false } as Skill.Info));
     const options = ctx.options as Record<string, unknown>;
     const models = { fast: 'github-copilot/gpt-5.6-luna', balanced: 'github-copilot/gpt-5.6-terra', strong: 'github-copilot/gpt-5.6-sol', ...(options.models as Partial<Record<Tier, string>> | undefined) };
     const limit = (name: string, fallback: number) => {

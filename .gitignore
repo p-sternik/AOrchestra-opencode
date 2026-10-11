@@ -4,6 +4,7 @@ work/
 __pycache__/
 *.pyc
 *.log
+*.tgz
 .env
 .env.*
 !.env.example

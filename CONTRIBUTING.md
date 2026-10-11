@@ -43,6 +43,27 @@ is no second runtime version string to update.
 The initial 0.2.2 release is bootstrapped manually. Earlier local 0.2.0/0.2.1
 iterations are recorded as context in its changelog, not invented historical tags.
 
+## Packaging and distribution
+
+`npm run pack:check` packs a real archive, installs it with production dependencies,
+imports the plugin and runs CLI help on Windows/Linux CI. The package ships its
+TypeScript entrypoint for the Bun-based OpenCode host, instructions and skill;
+the Node CLI shim invokes Bun. No install lifecycle scripts are required.
+
+GitHub main distribution works through npm/npx Git package specifiers without npm
+publication. The setup CLI pins the plugin to a Git commit and delegates downloading
+to native OpenCode plugin add. Registry publication is a separate operation after
+an appropriate Release Please version is merged and npm authentication is available:
+
+```sh
+npm run pack:check
+npm publish --access public
+```
+
+No npm token is stored in this repository or release workflow. GitHub Releases do
+not automatically publish npm packages. Update README distribution status only
+after confirming the registry publication.
+
 Compare releases:
 
 ```sh

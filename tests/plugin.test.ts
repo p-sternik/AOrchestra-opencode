@@ -51,7 +51,7 @@ async function fixture() {
 
 test('bundled repo-context is available by explicit ID without automatic invocation', async () => {
   const f = await fixture(); try {
-    expect(f.skills[0].id).toBe('repo-context');
+    expect(f.skills[0].id).toBe('aorchestra-repo-context');
     expect(f.skills[0].autoinvoke).toBe(false);
     expect(f.skills[0].path).toContain('skills');
     expect(f.skills[0].content.startsWith('---')).toBe(false);

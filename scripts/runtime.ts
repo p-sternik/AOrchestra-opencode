@@ -1,6 +1,14 @@
 import { spawn } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { OpenCode } from '@opencode/client/promise';
+import { rm } from 'node:fs/promises';
+import { basename, dirname, resolve } from 'node:path';
+import { tmpdir } from 'node:os';
+export async function removeTemporary(directory:string,prefix:string) {
+  const target=resolve(directory);
+  if(dirname(target)!==resolve(tmpdir())||!basename(target).startsWith(prefix))throw new Error('TEMP_CLEANUP_ESCAPE');
+  await rm(target,{recursive:true,force:true});
+}
 export const binary = process.env.OPENCODE_BIN || 'opencode2';
 export async function command(args: string[], cwd: string, timeoutMs = 120_000, env: NodeJS.ProcessEnv = process.env): Promise<string> {
   return new Promise((resolve, reject) => {

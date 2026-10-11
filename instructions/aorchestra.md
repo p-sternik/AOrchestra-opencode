@@ -8,7 +8,7 @@ Find the closest existing implementation, helper, pattern and focused test befor
 
 ## Repository context
 
-Read an existing repository map when it helps locate an unfamiliar area or a cross-module dependency, then confirm relevant facts in current code. Use native search directly when a map is absent or stale. A normal coding task does not invoke repo-context or generate a document hierarchy. Load the one bundled repo-context skill by exact ID only when the user asks to create or refresh repository documentation/onboarding. Make a narrow correction to existing documentation when the authorized code change directly invalidates it; this does not require a mapping workflow. Pass the executor only facts needed for its bounded task, existing patterns, preservation constraints and verifier references.
+Read an existing repository map when it helps locate an unfamiliar area or a cross-module dependency, then confirm relevant facts in current code. Use native search directly when a map is absent or stale. A normal coding task does not invoke repo-context or generate a document hierarchy. Load the bundled skill by exact ID `aorchestra-repo-context` only when the user asks to create or refresh repository documentation/onboarding. Make a narrow correction to existing documentation when the authorized code change directly invalidates it; this does not require a mapping workflow. Pass the executor only facts needed for its bounded task, existing patterns, preservation constraints and verifier references.
 
 ## Brownfield workflow
 

@@ -1,0 +1,105 @@
+import { readFile, mkdtemp } from 'node:fs/promises';
+import { resolve, join } from 'node:path';
+import { tmpdir } from 'node:os';
+import { createInterface } from 'node:readline/promises';
+import { stdin, stdout } from 'node:process';
+import { Npm } from '@opencode/util/npm';
+import { mergeSetup, readConfig, saveConfig, isAOrchestraTarget, type Models } from '../lib/setup';
+import { command, binary, privateClient, removeTemporary } from './runtime';
+import pkg from '../package.json';
+
+const root = resolve(import.meta.dir,'..');
+const args = process.argv.slice(2);
+const operation = args[0];
+const value = (name:string)=>args.find(arg=>arg.startsWith(`--${name}=`))?.slice(name.length+3);
+if (!operation || args.includes('--help') || operation==='help') {
+  console.log(`AOrchestra ${pkg.version}\n\nUsage: aorchestra setup [--model=provider/model] [--fast=...] [--balanced=...] [--strong=...] [--default] [--package=npm-or-git-spec]\n       aorchestra check [--project=/path]\n       aorchestra report [report options]\n\nRequires Bun and OpenCode 2.0.26. Set OPENCODE_BIN if V2 is not named opencode2.\nSetup preserves global JSONC and makes no model calls. Git distribution is available; npm publication is separate.`);
+  process.exit(0);
+}
+if (operation==='--version') {console.log(pkg.version);process.exit(0);}
+try {
+  if (operation==='check' || operation==='report') {
+    const env = {...process.env};
+    if (value('project')) env.AORCHESTRA_CHECK_PROJECT=resolve(value('project')!);
+    const child = Bun.spawn(['bun',join(root,operation==='check'?'scripts/check.ts':'scripts/report.ts'),
+      ...(operation==='check'?['--global']:args.slice(1))],{env,stdout:'inherit',stderr:'inherit',stdin:'inherit'});
+    process.exit(await child.exited);
+  }
+  if (operation!=='setup') throw new Error('UNKNOWN_COMMAND: use --help');
+  const allowed = new Set(['model','fast','balanced','strong','package']);
+  if (args.slice(1).some(arg=>arg!=='--default' && (!arg.startsWith('--') || !allowed.has(arg.slice(2).split('=')[0]) || !arg.includes('=')))) throw new Error('UNKNOWN_OPTION: use --help');
+  const version = await command(['--version'],root);
+  if (/(\d+\.\d+\.\d+)/.exec(version)?.[1]!=='2.0.26') throw new Error('OpenCode 2.0.26 is required');
+  const neutral = await mkdtemp(join(tmpdir(),'aorchestra-setup-'));
+  try {
+    const env:NodeJS.ProcessEnv={...process.env};
+    delete env.OPENCODE_CONFIG; delete env.OPENCODE_CONFIG_CONTENT;
+    const paths = await command(['debug','paths'],neutral,120000,env);
+    const directory = resolve(env.OPENCODE_CONFIG_DIR ?? /^config\s+(.+)$/m.exec(paths)?.[1]?.trim() ?? (()=>{throw new Error('GLOBAL_CONFIG_UNKNOWN');})());
+    const jsonc = join(directory,'opencode.jsonc'), json = join(directory,'opencode.json');
+    const read = (path:string)=>readFile(path,'utf8').catch(error=>{if(error.code==='ENOENT')return undefined;throw error;});
+    const [jsoncText,jsonText] = await Promise.all([read(jsonc),read(json)]);
+    if (jsonText!==undefined) readConfig(jsonText);
+    const configPath=jsoncText!==undefined?jsonc:json;
+    const before=jsoncText??jsonText;
+    const config=readConfig(before??'{}');
+    if (jsonText!==undefined && jsoncText!==undefined) {
+      const lower=readConfig(jsonText);
+      const targets = lower.plugins?.map((p:any)=>typeof p==='string'?p:p?.package) ?? [];
+      if (targets.some((target:any)=>typeof target==='string' && isAOrchestraTarget(target))) throw new Error('AORCHESTRA_IN_LOWER_PRIORITY_CONFIG: move its JSON registration into JSONC before setup');
+    }
+    const temporary = await privateClient(neutral,{...env,OPENCODE_DB:join(neutral,'discovery.db')});
+    let available:string[]=[]; let observedTargets:string[]=[];
+    try {
+      await temporary.client.location.get({location:{directory:neutral}});
+      for(let attempt=0;attempt<20;attempt++) {
+        available=(await temporary.client.model.list({location:{directory:neutral}})).data.map(model=>`${model.providerID}/${model.id}`);
+        if(available.length && [value('model'),value('fast'),value('balanced'),value('strong')].filter(Boolean).every(model=>available.includes(model!)))break;
+        await new Promise(resolve=>setTimeout(resolve,250));
+      }
+      observedTargets=(await temporary.client.plugin.list({location:{directory:neutral}})).data.filter(plugin=>plugin.id==='aorchestra').flatMap(plugin=>plugin.source.type==='package'?[plugin.source.target]:plugin.source.type==='local'?[plugin.source.path]:[]);
+    } finally {await temporary.close();}
+    const prior = config.agents?.aorchestra?.model ?? config.model;
+    let primary = value('model') ?? (typeof prior==='string' && available.includes(prior)?prior:undefined);
+    if (!primary && stdin.isTTY) {
+      console.log('Choose an available main model (all tiers use it unless specified):');
+      for(const model of available)console.log(`  ${model}`);
+      const prompt=createInterface({input:stdin,output:stdout});
+      try {primary=(await prompt.question('provider/model: ')).trim();} finally {prompt.close();}
+    }
+    if (!primary) throw new Error('MODEL_REQUIRED: pass --model=provider/model after provider sign-in');
+    const priorOptions=config.plugins?.find((entry:any)=>entry && typeof entry==='object' && (isAOrchestraTarget(entry.package??'')||observedTargets.includes(entry.package)))?.options?.models;
+    const tier=(name:string)=>value(name)??(typeof priorOptions?.[name]==='string'&&available.includes(priorOptions[name])?priorOptions[name]:primary!);
+    const models:Models={primary,fast:tier('fast'),balanced:tier('balanced'),strong:tier('strong')};
+    for(const model of Object.values(models))if(!available.includes(model))throw new Error(`MODEL_NOT_IN_CATALOGUE: ${model}`);
+    let spec=value('package');
+    if(!spec) {
+      const revision=Bun.spawnSync(['git','ls-remote','https://github.com/p-sternik/AOrchestra-opencode.git','refs/heads/main'],{stdout:'pipe',stderr:'pipe'});
+      const sha=new TextDecoder().decode(revision.stdout).split(/\s/)[0];
+      if(revision.exitCode!==0||! /^[a-f0-9]{40}$/.test(sha))throw new Error('CANNOT_PIN_GITHUB_REVISION: provide --package explicitly');
+      spec=`git+https://github.com/p-sternik/AOrchestra-opencode.git#${sha}`;
+    }
+    console.log('Installing through OpenCode’s native package manager…');
+    // Let the V2 executable perform installation with its own runtime. Its config
+    // write goes to a staging directory; we merge the real JSONC ourselves.
+    await command(['plugin','add',spec],neutral,600_000,{...env,OPENCODE_CONFIG_DIR:join(neutral,'install-config')});
+    const installed=await Npm.resolve(spec);
+    const installedPkg=JSON.parse(await readFile(join(installed.directory,'package.json'),'utf8'));
+    if(installedPkg.name!==pkg.name)throw new Error('UNEXPECTED_PLUGIN_PACKAGE');
+    const template=JSON.parse(await readFile(join(installed.directory,'opencode.json'),'utf8'));
+    for(const id of ['aorchestra','aorchestra-executor']) {
+      template.agents[id].system=await readFile(join(installed.directory,'instructions',`${id}.md`),'utf8');
+    }
+    const after=mergeSetup(before??'{}',template,spec,models,args.includes('--default'),observedTargets);
+    const saved=await saveConfig(configPath,before,after);
+    console.log(JSON.stringify({version:installedPkg.version,package:spec,configPath,changed:saved.changed,backup:saved.backup??null,models},null,2));
+    const check=Bun.spawn(['bun',join(installed.directory,'scripts/check.ts'),'--global'],{cwd:neutral,env:{...env,OPENCODE_BIN:binary},stdout:'inherit',stderr:'inherit'});
+    if(await check.exited!==0)throw new Error('GLOBAL_CHECK_FAILED: config saved; review the diagnostic and backup before retrying');
+    console.log(`Ready. In any project: ${binary} run --standalone --agent aorchestra "Your task"\nCatalogue checked; successful provider inference remains untested.`);
+    if(process.env.OPENCODE_CONFIG||process.env.OPENCODE_CONFIG_CONTENT)console.log('Your current terminal has explicit config overrides; restore/unset them before normal global usage.');
+  } finally {await removeTemporary(neutral,'aorchestra-setup-');}
+} catch(error) {
+  console.error(error && typeof error==='object' && 'message' in error?String(error.message):(error && typeof error==='object' && '_tag' in error?`Setup failed: ${error._tag}`:'Setup failed'));
+  process.exit(1);
+}
+process.exit(0);

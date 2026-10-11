@@ -4,11 +4,15 @@ For installation and everyday use, start with the [README](../README.md).
 
 ## Global installation
 
-Discover the active global directory with `opencode2 debug paths`, checking
+Prefer the packaged `aorchestra setup` command in the [README](../README.md).
+It invokes native plugin add, pins the Git source, embeds the installed instructions
+and merges global JSONC. For manual/source installation, discover the directory with
+`opencode2 debug paths`, checking
 `OPENCODE_CONFIG_DIR` and the loaded config sources as described in the
 [setup guide](setup-for-agents.md). Merge the template into the existing global
 opencode.json/jsonc, preserving unrelated settings and JSONC comments. Use absolute
-plugin directory and instruction paths pointing to the permanent harness checkout.
+plugin directory and instruction paths pointing to the permanent harness checkout,
+or a package spec and embedded instruction text for a packaged installation.
 Normal use requires no project config or OPENCODE_CONFIG override. Project-local
 config can still override global settings.
 
@@ -64,7 +68,7 @@ not a formal semantic proof. Failed work is not automatically rolled back.
 
 One portable [repo-context skill](../skills/repo-context/SKILL.md) is bundled and
 registered through the native skill transform. Invoke it explicitly with
-`@repo-context` or ask the agent to map/update repository documentation.
+`@aorchestra-repo-context` or ask the agent to map/update repository documentation.
 
 It reuses existing docs, starts with a short repo-map, adds architecture/domain/flow
 detail only when useful and updates a bounded navigation block in AGENTS.md while
@@ -73,9 +77,10 @@ files/symbol candidates and checks source freshness and links. It is not Aider's
 graph-ranking engine.
 
 Existing context can be read when relevant; missing documentation leads to normal
-code search. The skill has `autoinvoke: false`. This supplied profile disables the
-global skill-discovery plugin and allows only the bundled skill. Repository
-AGENTS.md instructions still apply; other profiles remain independently configured.
+code search. The skill has `autoinvoke: false` and the namespaced native ID
+`aorchestra-repo-context`. Main-agent permissions allow only the bundle by default.
+Global skill discovery remains enabled for other agents; existing explicit user
+exclusions are preserved. Repository AGENTS.md instructions still apply.
 
 ## Metrics and improvement reports
 
@@ -116,6 +121,7 @@ bun run test
 python -m unittest discover -s tests -p '*_test.py'
 bun run eval:check
 bun scripts/version-check.ts
+npm run pack:check
 bun run check
 ```
 
@@ -133,6 +139,10 @@ to avoid the repository template overriding global config. Set
 `AORCHESTRA_CHECK_PROJECT` to test a specific project location. Both modes use an
 isolated database and make no model calls. The `--global` mode is available on main
 and in releases that include this change; the original 0.2.2 checker has no such mode.
+
+The packaged CLI exposes the same check as `aorchestra check`, with optional
+`--project=/path`. Package registrations are checked against native source metadata;
+the skill must come from the actually loaded package rather than the CLI cache.
 
 Opt-in real-model evaluation:
 
