@@ -19,9 +19,9 @@ feat!: change the task contract schema
 ```
 
 `fix` bumps patch; `feat` bumps minor. Breaking changes bump minor while below
-1.0.0, and major at/above 1.0.0. Documentation, refactoring, tests and CI changes
-are included in changelogs alongside releasable work; they normally do not trigger
-a release on their own. Ordinary Git history records every commit regardless.
+1.0.0, and major at/above 1.0.0. The visible changelog sections configured in this
+repository also allow documentation, refactoring, test and CI changes to produce
+a patch release PR. Ordinary Git history records every commit regardless.
 
 ## Automatic releases
 
