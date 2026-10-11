@@ -1,8 +1,10 @@
 # Contributing and releases
 
 Keep changes small, reuse existing patterns and add tests that demonstrate changed
-behavior. Installation and checks are listed in README.md. Native smoke checks
-require OpenCode 2.0.26; model evaluation is opt-in and can incur provider costs.
+behavior. Installation is in [README.md](README.md); the full check commands are
+in the [technical reference](docs/reference.md#validation-and-evaluation). Native
+smoke checks require OpenCode 2.0.26; model evaluation is opt-in and can incur
+provider costs.
 
 ## Commit messages
 
