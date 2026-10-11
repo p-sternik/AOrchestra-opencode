@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { createInterface } from 'node:readline/promises';
 import { stdin, stdout } from 'node:process';
 import { Npm } from '@opencode/util/npm';
-import { mergeSetup, readConfig, saveConfig, isAOrchestraTarget, type Models } from '../lib/setup';
+import { mergeSetup, readConfig, saveConfig, isAOrchestraTarget, globalEnvironment, type Models } from '../lib/setup';
 import { command, binary, privateClient, removeTemporary } from './runtime';
 import pkg from '../package.json';
 
@@ -32,8 +32,7 @@ try {
   if (/(\d+\.\d+\.\d+)/.exec(version)?.[1]!=='2.0.26') throw new Error('OpenCode 2.0.26 is required');
   const neutral = await mkdtemp(join(tmpdir(),'aorchestra-setup-'));
   try {
-    const env:NodeJS.ProcessEnv={...process.env};
-    delete env.OPENCODE_CONFIG; delete env.OPENCODE_CONFIG_CONTENT;
+    const env=globalEnvironment(process.env);
     const paths = await command(['debug','paths'],neutral,120000,env);
     const directory = resolve(env.OPENCODE_CONFIG_DIR ?? /^config\s+(.+)$/m.exec(paths)?.[1]?.trim() ?? (()=>{throw new Error('GLOBAL_CONFIG_UNKNOWN');})());
     const jsonc = join(directory,'opencode.jsonc'), json = join(directory,'opencode.json');
@@ -48,18 +47,22 @@ try {
       const targets = lower.plugins?.map((p:any)=>typeof p==='string'?p:p?.package) ?? [];
       if (targets.some((target:any)=>typeof target==='string' && isAOrchestraTarget(target))) throw new Error('AORCHESTRA_IN_LOWER_PRIORITY_CONFIG: move its JSON registration into JSONC before setup');
     }
-    const temporary = await privateClient(neutral,{...env,OPENCODE_DB:join(neutral,'discovery.db')});
+    // Model discovery needs the user's normal DB because V2 stores credentials there.
+    // Only the subsequent smoke check uses a separate test DB.
+    const temporary = await privateClient(neutral,env);
+    const prior = config.agents?.aorchestra?.model ?? config.model;
+    const configuredTiers=config.plugins?.find((entry:any)=>entry && typeof entry==='object' && isAOrchestraTarget(entry.package??''))?.options?.models;
+    const preferred=[value('model')??(typeof prior==='string'?prior:undefined),...['fast','balanced','strong'].map(name=>value(name)??configuredTiers?.[name])].filter((model):model is string=>typeof model==='string');
     let available:string[]=[]; let observedTargets:string[]=[];
     try {
       await temporary.client.location.get({location:{directory:neutral}});
       for(let attempt=0;attempt<20;attempt++) {
         available=(await temporary.client.model.list({location:{directory:neutral}})).data.map(model=>`${model.providerID}/${model.id}`);
-        if(available.length && [value('model'),value('fast'),value('balanced'),value('strong')].filter(Boolean).every(model=>available.includes(model!)))break;
+        if(available.length && preferred.every(model=>available.includes(model)))break;
         await new Promise(resolve=>setTimeout(resolve,250));
       }
       observedTargets=(await temporary.client.plugin.list({location:{directory:neutral}})).data.filter(plugin=>plugin.id==='aorchestra').flatMap(plugin=>plugin.source.type==='package'?[plugin.source.target]:plugin.source.type==='local'?[plugin.source.path]:[]);
     } finally {await temporary.close();}
-    const prior = config.agents?.aorchestra?.model ?? config.model;
     let primary = value('model') ?? (typeof prior==='string' && available.includes(prior)?prior:undefined);
     if (!primary && stdin.isTTY) {
       console.log('Choose an available main model (all tiers use it unless specified):');

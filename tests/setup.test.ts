@@ -2,10 +2,16 @@ import { expect, test } from 'bun:test';
 import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { mergeSetup, readConfig, saveConfig, isAOrchestraTarget } from '../lib/setup';
+import { mergeSetup, readConfig, saveConfig, isAOrchestraTarget, globalEnvironment } from '../lib/setup';
 import { removeTemporary } from '../scripts/runtime';
 const template={plugins:[{package:'./plugins/aorchestra',options:{maxAttempts:2,models:{}}}],agents:{aorchestra:{system:'Main instructions',permissions:[{action:'shell',effect:'ask'}]},'aorchestra-executor':{system:'Worker instructions'}}};
 const models={primary:'p/main',fast:'p/fast',balanced:'p/main',strong:'p/strong'};
+test('global discovery retains the credential DB and directory while removing template overrides',()=>{
+  const before={OPENCODE_DB:'user.db',OPENCODE_CONFIG_DIR:'global',OPENCODE_CONFIG:'template.json',OPENCODE_CONFIG_CONTENT:'{}'};
+  const after=globalEnvironment(before);
+  expect(after.OPENCODE_DB).toBe('user.db');expect(after.OPENCODE_CONFIG_DIR).toBe('global');
+  expect(after.OPENCODE_CONFIG).toBeUndefined();expect(after.OPENCODE_CONFIG_CONTENT).toBeUndefined();expect(before.OPENCODE_CONFIG).toBe('template.json');
+});
 test('setup preserves JSONC comments, other agents, providers, default and unrelated plugins',()=>{
   const text='// User comment\n{"model":"old/model","default_agent":"build","providers":{"p":{"settings":{"x":1}}},"plugins":["*","other"],"agents":{"build":{"description":"keep"}}}';
   const result=mergeSetup(text,template,'aorchestra-opencode-v2@1.0.0',models);

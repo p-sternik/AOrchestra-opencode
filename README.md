@@ -55,6 +55,10 @@ No manual copying or cloning is needed. Setup:
   providers, unrelated plugins and existing settings. Changed files get a backup.
 - Checks actual global loading with an isolated database and zero model calls.
 
+Model discovery uses the normal OpenCode database so existing provider sign-ins
+remain available; it queries the catalogue without running a task. The smoke
+check uses a separate test database.
+
 The GitHub default resolves main to an exact commit before registering the plugin.
 The command explicitly permits Git fetching for this invocation, as required by
 [npm 12](https://docs.npmjs.com/cli/v12/using-npm/config/#allow-git), and disables

@@ -6,6 +6,11 @@ import { BUNDLED_SKILL_ID } from './core';
 
 type RecordValue = Record<string, any>;
 export type Models = { primary: string; fast: string; balanced: string; strong: string };
+export function globalEnvironment(input: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  const env={...input};
+  delete env.OPENCODE_CONFIG;delete env.OPENCODE_CONFIG_CONTENT;
+  return env;
+}
 export function readConfig(text: string): RecordValue {
   const errors: ParseError[] = [];
   const value = parse(text, errors, {allowTrailingComma:true});

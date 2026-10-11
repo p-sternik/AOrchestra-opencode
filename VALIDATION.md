@@ -30,7 +30,7 @@ database and make zero model calls. This mode is not part of the original 0.2.2 
 
 ## Installable package (development branch)
 
-Current local checks: **45 harness/setup tests passed**, 130 assertions, plus
+Current local checks: **46 harness/setup tests passed**, 135 assertions, plus
 **13 repo-context helper tests passed**. Typecheck, package validation and the
 repository-profile native smoke check also passed.
 
@@ -49,6 +49,10 @@ configuration. npm registry publication has not been performed.
 The packaged Node/Bun CLI was exercised outside the source checkout. Repeating
 setup against the same pinned source returned changed=false, no new backup, and
 a successful global check. A separately installed repo-context remained present.
+
+Model discovery retains the normal/custom credential DB and removes only explicit
+config/content template overrides. This differs from smoke checking, which remains
+isolated. Discovery waits for preferred configured models during asynchronous loading.
 
 ## What these checks establish
 
