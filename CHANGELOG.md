@@ -3,6 +3,34 @@
 Release Please maintains future entries from Conventional Commits. Earlier local
 iterations are described below for context; they are not historical Git tags.
 
+## [0.3.0](https://github.com/p-sternik/AOrchestra-opencode/compare/0.2.2...0.3.0) (2026-10-11)
+
+
+### ⚠ BREAKING CHANGES
+
+* delegation requires a structured handoff on the task or call; fast analysis requires analysisMode lookup. Existing tasks can provide a handoff without changing their id.
+
+### Features
+
+* add installable plugin package and global setup CLI ([45db2f9](https://github.com/p-sternik/AOrchestra-opencode/commit/45db2f99d066136854edb285e951230438fc4eeb))
+
+
+### Bug Fixes
+
+* preserve provider sign-ins during model discovery ([2954c05](https://github.com/p-sternik/AOrchestra-opencode/commit/2954c056f3ba5d578b5d141fc548a8dc1230a2e6))
+* require source handoffs and refine research routing ([dfdb157](https://github.com/p-sternik/AOrchestra-opencode/commit/dfdb157404dd5147ba1c69f59618a0aa6919efe3))
+* support npm 12 Git installs and transient Windows cleanup locks ([2ac910a](https://github.com/p-sternik/AOrchestra-opencode/commit/2ac910a8e6afa334a3fa14d7edbbbe82fb5d7925))
+* validate global installation and document configuration merging ([9c26e2a](https://github.com/p-sternik/AOrchestra-opencode/commit/9c26e2a0361cee43cc3b30e511a192e5a10a9f11))
+
+
+### Documentation
+
+* add agent-assisted setup and contributor instructions ([722eaa6](https://github.com/p-sternik/AOrchestra-opencode/commit/722eaa6460cf0f4a088465f955673a3b90aabeaf))
+* clarify release behavior for documentation changes ([b6bc09a](https://github.com/p-sternik/AOrchestra-opencode/commit/b6bc09aa0a054edeee750461aa1e540e74348eb0))
+* credit architectural sources and visualize the workflow ([c63a8e6](https://github.com/p-sternik/AOrchestra-opencode/commit/c63a8e6cc392b155c4cd734a211e5897149b74e0))
+* normalize technical reference formatting ([1716ca0](https://github.com/p-sternik/AOrchestra-opencode/commit/1716ca0f610da7b3e9ea41727ea5b424b516156e))
+* simplify onboarding and separate the technical reference ([e7df095](https://github.com/p-sternik/AOrchestra-opencode/commit/e7df0958b869bd2ad83f8b6d941de372695f161e))
+
 ## 0.2.2 (2026-10-11)
 
 ### Features

@@ -1,14 +1,42 @@
 {
   "name": "aorchestra-opencode-v2",
-  "version": "0.2.2",
+  "version": "0.3.0",
   "type": "module",
   "description": "A brownfield harness for OpenCode V2 with selective delegation and global setup.",
-  "repository": { "type": "git", "url": "git+https://github.com/p-sternik/AOrchestra-opencode.git" },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/p-sternik/AOrchestra-opencode.git"
+  },
   "homepage": "https://github.com/p-sternik/AOrchestra-opencode#readme",
-  "bin": { "aorchestra": "./bin/aorchestra.mjs" },
-  "exports": { ".": "./plugins/aorchestra.ts", "./server": "./plugins/aorchestra.ts" },
-  "files": ["bin", "lib", "plugins", "scripts/cli.ts", "scripts/check.ts", "scripts/runtime.ts", "scripts/report.ts", "instructions", "skills/repo-context", "opencode.json", "README.md", "docs", "VALIDATION.md", "RESEARCH.md", "CHANGELOG.md", "CONTRIBUTING.md", "AGENTS.md"],
-  "engines": { "node": ">=22" },
+  "bin": {
+    "aorchestra": "./bin/aorchestra.mjs"
+  },
+  "exports": {
+    ".": "./plugins/aorchestra.ts",
+    "./server": "./plugins/aorchestra.ts"
+  },
+  "files": [
+    "bin",
+    "lib",
+    "plugins",
+    "scripts/cli.ts",
+    "scripts/check.ts",
+    "scripts/runtime.ts",
+    "scripts/report.ts",
+    "instructions",
+    "skills/repo-context",
+    "opencode.json",
+    "README.md",
+    "docs",
+    "VALIDATION.md",
+    "RESEARCH.md",
+    "CHANGELOG.md",
+    "CONTRIBUTING.md",
+    "AGENTS.md"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "test": "bun test ./tests",
     "typecheck": "tsc --noEmit",
