@@ -42,6 +42,21 @@ Delegated work receives a task-specific instruction, context, tool set and model
 The main agent owns the outcome; tracked-task acceptance is separate from a
 worker's completion report.
 
+## Set up with an AI agent
+
+Give the following prompt to your coding agent. It needs access to your terminal
+and files to perform the setup; a chat-only assistant can explain the steps.
+
+```text
+Set up AOrchestra for OpenCode V2 for my existing project.
+Read https://raw.githubusercontent.com/p-sternik/AOrchestra-opencode/main/docs/setup-for-agents.md
+and follow its setup procedure. Ask me for the project path if you cannot identify it.
+```
+
+The [agent setup guide](docs/setup-for-agents.md) covers environment discovery,
+model selection, a separate profile and a no-inference installation check. The
+manual steps below remain available if you prefer to configure it yourself.
+
 ## Quick start
 
 ### 1. Check the prerequisites
@@ -190,6 +205,7 @@ published harness version; the OpenCode badge names the tested runtime version.
 
 | Looking for | Read |
 | --- | --- |
+| Configuration by a coding agent | [Agent setup guide](docs/setup-for-agents.md) |
 | Architecture, configuration and limits | [Technical reference](docs/reference.md) |
 | What has been tested | [Validation](VALIDATION.md) |
 | Research and design decisions | [Research](RESEARCH.md) |
