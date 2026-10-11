@@ -47,6 +47,35 @@ A registered task includes `id`, `kind`, `instruction`, `context`, `dependsOn`,
 `writePaths`, `preserve` and `verifiers`. Dependencies refer to earlier registered
 tasks. Write paths are exact relative filenames rather than globs.
 
+Every delegation also requires a bounded `handoff`, supplied on registration or
+on the delegate call (including for an older stored task). Its `sources` distinguish
+observed references from candidates, with an explicit revision or `unknown`;
+`facts`, `unknowns` and `checks` are separate arrays. Empty arrays are allowed where
+appropriate, but a source/search target is required. The handoff is capped at 12k
+characters and sent to the child with a runtime source-snapshot fingerprint.
+Neither a supplied revision nor the fingerprint proves the facts are current.
+
+```json
+{
+  "sources": [{ "ref": "src/users.ts:findUser", "status": "observed", "revision": "unknown" }],
+  "facts": ["Missing users currently trigger a dereference error"],
+  "unknowns": ["Legacy caller expectations have not yet been checked"],
+  "checks": ["Focused regression test not run"]
+}
+```
+
+For research, `analysisMode: lookup` permits fast fact extraction; synthesis
+requires balanced/strong. One known lookup normally stays DIRECT. Main-model
+capability is separate from worker tiers: delegate a bounded strong investigation
+or deliberately change the main model when direct reasoning exceeds it.
+
+The default remains two attempts. Same-tier and one-tier retries require delta
+and routing evidence; fast-to-strong additionally requires `escalationReason`:
+reasoning-gap, compatibility-risk, security-risk or weak-verification. Downgrades
+are rejected. Missing permissions/tools are blockers rather than model-escalation
+signals. Categories and analysis modes are declared contracts, not automatic
+semantic assessments. Distinct tiers have no effect if they map to one model.
+
 Example verifier:
 
 ```json

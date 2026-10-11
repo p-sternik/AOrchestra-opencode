@@ -144,6 +144,10 @@ flowchart LR
 ```
 
 Each delegation gets task-specific instructions, context, tools and a model.
+It also requires a bounded source handoff separating facts, candidates, unknowns
+and checks. Fast research is limited to declared fact lookup; synthesis uses
+balanced/strong. A reasoned fast-to-strong retry is available within the existing
+two-attempt budget. See the [routing contract](docs/reference.md#task-contracts-and-verification).
 Worker completion is separate from tracked-task acceptance. Workers have scoped
 tools/edit paths; the main agent runs tests. Permissions are not an OS sandbox.
 Failed changes are not automatically rolled back. Large repositories need care

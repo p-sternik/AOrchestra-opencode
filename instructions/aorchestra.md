@@ -20,16 +20,26 @@ Read an existing repository map when it helps locate an unfamiliar area or a cro
 6. DIRECT: use native tools immediately for cohesive localized work; if a tracked task was justified, start it before edits/verifiers. DELEGATE: call `aorchestra_delegate` with the registered task id, exact available tool IDs, model tier and observable routing evidence. The plugin starts the task. Native tools are the only execution path; there is no file bridge or workspace-grant tool.
 7. Workers do not receive shell. Keep cohesive diagnose/edit/test work DIRECT when command execution is integral to reasoning. After an offloaded mechanical change, run the exact verification commands through your native tools. Respect native permissions; never synthesize approval or auto-reply to a permission request.
 8. Review the actual diff, test results and compatibility constraints. A worker COMPLETE is a report, not acceptance. `aorchestra_task accept` requires all observed verifier predicates to pass against the current source snapshot, changes within write scope, and your explicit `compatibilityReview`. Explain how each preservation constraint was checked. Automated predicates do not prove all semantics; report residual uncertainty.
-9. Retry only with a concrete change in evidence/instruction/tool selection and the same task id. Set `delta`; the plugin derives escalation from durable history and permits at most one upward tier. Missing capabilities, permissions or data are blockers. Never bypass an acceptance failure by registering the same logical work under a new id.
+9. Retry only with new evidence/instruction/tool selection and the same task id. Set `delta`. A one-tier increase needs a routing reason; fast-to-strong additionally needs `escalationReason`: reasoning-gap, compatibility-risk, security-risk or weak-verification. Keep the attempt budget; choose the justified retry rather than assuming three tiers imply three attempts. Missing capabilities, permissions or data are blockers, not reasons to spend on a stronger model. Never bypass acceptance by registering the same logical work under a new id.
 10. If interrupted or restarted, inspect task status and native child sessions. `recover` interrupts unfinished children and retains their files, marks attempts as failed, and requires a new evidenced retry. Invalidate a task and its dependents when assumptions or scope change. Register a new reviewed task for genuinely changed scope.
 
 ## Model tiers
 
-- fast: settled locations, behavior, implementation pattern and objective verifier; extraction and mechanical changes.
-- balanced: bounded behavior interpretation, diagnosis or choice among local implementations.
+- fast: bounded fact extraction and settled mechanical changes with objective checks. For research, register analysisMode lookup: locate definitions/callers/tests or retrieve a specific fact from versioned primary documentation. Return references, observed facts and unknowns; leave architectural recommendations to the primary.
+- balanced: analysisMode synthesis, bounded behavior interpretation, diagnosis or comparison among local implementations/sources.
 - strong: unresolved architectural/security/compatibility decisions, high impact, weak verification or competing causes after inspection.
 
 A higher initial tier is allowed when justified by risk. Escalation after failure is a separate history-dependent decision. Do not route by language, framework, repository size or keywords alone.
+
+Choose DIRECT for one known lookup; delegating it repeats overhead. Delegate a bounded lookup to fast only when it separates useful work/context. Use balanced or strong for conflicting evidence, cross-module causality, compatibility/security interpretation or architectural recommendations. The declared analysisMode is a routing contract, not proof of difficulty.
+
+DIRECT uses your configured main model; worker tiers do not switch it. If a cohesive task exceeds that model's demonstrated capability, request a bounded strong analysis before implementing, or ask for a main-model change when needed. Keep the reasoning/test loop cohesive. If all tiers point to the same model, report that escalation changes no model capability and do not claim savings.
+
+## Source handoff
+
+Every delegation requires `handoff`, saved on the task or supplied in the delegate call. Use the task instruction for the question/outcome; do not duplicate it. Supply `sources` with ref, observed/candidate status and revision (use unknown when unavailable), `facts`, `unknowns` and `checks`. Sources may be file/symbol references, versioned URLs or explicit search targets. A candidate/search target is not a finding. Checks list observed results or explicitly not-run checks; executable acceptance predicates remain in verifiers.
+
+Keep only relevant evidence, conventions and consumers; context holds additional scope hints rather than duplicating the handoff. Refresh changed evidence through delegate.handoff on retry. The runtime adds a current source-snapshot fingerprint, which is not a Git revision or proof that supplied facts are current. Confirm consequential claims against current sources. A failed lookup returns unknowns; it does not justify inventing a conclusion or changing code.
 
 ## Context and authority
 

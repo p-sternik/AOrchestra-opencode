@@ -2,12 +2,16 @@ import { Plugin, Model, Skill } from '@opencode/plugin';
 import { readFile, realpath } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { resolve } from 'node:path';
-import { BUNDLED_SKILL_ID, Ledger, parseResult, permissionRules, ready, registerTask, reserve, taskById, validateTools, verifierPassed, type Contract, type Task, type Tier } from '../lib/core';
+import { BUNDLED_SKILL_ID, escalationReasons, validateHandoff, Ledger, parseResult, permissionRules, ready, registerTask, reserve, taskById, validateTools, verifierPassed, type Contract, type Task, type Tier, type Handoff, type EscalationReason } from '../lib/core';
 import { canonicalTarget, changedPaths, fingerprint, snapshot } from '../lib/files';
 import { Telemetry, counters, metricsRpc } from '../lib/telemetry';
 
 const idSchema = { type: 'string', pattern: '^[a-z0-9][a-z0-9._-]{0,79}$' };
 const strings = { type: 'array', maxItems: 100, items: { type: 'string', minLength: 1 }, uniqueItems: true };
+const handoffSchema = {type:'object',additionalProperties:false,properties:{
+  sources:{type:'array',minItems:1,maxItems:12,items:{type:'object',additionalProperties:false,properties:{ref:{type:'string',minLength:1,maxLength:1600},status:{enum:['observed','candidate']},revision:{type:'string',minLength:1,maxLength:1600}},required:['ref','status','revision']}},
+  facts:{...strings,maxItems:20,items:{type:'string',minLength:1,maxLength:1600}},unknowns:{...strings,maxItems:20,items:{type:'string',minLength:1,maxLength:1600}},checks:{...strings,maxItems:20,items:{type:'string',minLength:1,maxLength:1600}},
+},required:['sources','facts','unknowns','checks']};
 const verifierSchema = { type: 'object', additionalProperties: false, properties: {
   id: idSchema, tool: { type: 'string', minLength: 1 },
   input: { type: 'object', minProperties: 1, additionalProperties: { type: 'string' } },
@@ -17,11 +21,12 @@ const taskSchema = { type: 'object', additionalProperties: false, properties: {
   id: idSchema, kind: { enum: ['analysis', 'change', 'verification'] },
   instruction: { type: 'string', minLength: 1, maxLength: 6000 }, context: { type: 'string', maxLength: 18000 },
   dependsOn: strings, writePaths: strings, preserve: strings,
+  handoff:handoffSchema,analysisMode:{enum:['lookup','synthesis']},
   verifiers: { type: 'array', minItems: 1, maxItems: 10, items: verifierSchema },
 }, required: ['id', 'kind', 'instruction', 'context', 'dependsOn', 'writePaths', 'preserve', 'verifiers'] };
 
 type TaskInput = { operation: 'register' | 'start' | 'status' | 'accept' | 'invalidate' | 'recover'; task?: Task; taskId?: string; compatibilityReview?: string; reason?: string };
-type DelegateInput = { taskId: string; model: Tier; tools: string[]; routingEvidence: string; delta?: string };
+type DelegateInput = { taskId: string; model: Tier; tools: string[]; routingEvidence: string; delta?: string; handoff?:Handoff; escalationReason?:EscalationReason };
 type SavedContract = Contract & { active: boolean };
 
 export default Plugin.define({
@@ -213,8 +218,8 @@ export default Plugin.define({
       });
       editor.add({
         name: 'aorchestra_delegate', options: { codemode: false, permission: 'aorchestra_delegate' },
-        description: 'Delegate a registered task with fresh minimal context, exact native tools, selected model tier and observable routing reason. Workers have no arbitrary shell. Run test/build validators through primary native shell, then accept the task separately. A retry uses the same taskId and a concrete delta; tier increases are enforced from durable history.',
-        input: { type: 'object', additionalProperties: false, properties: { taskId: idSchema, model: { enum: ['fast', 'balanced', 'strong'] }, tools: strings, routingEvidence: { type: 'string', minLength: 1, maxLength: 1000 }, delta: { type: 'string', maxLength: 2000 } }, required: ['taskId', 'model', 'tools', 'routingEvidence'] },
+        description: 'Delegate with a bounded source handoff (on the task or this call), exact native tools and a routing reason. Fast analysis requires task analysisMode lookup; synthesis uses balanced/strong. Workers have no shell. Retry uses the same taskId and new delta; fast-to-strong requires escalationReason and keeps the attempt budget. Primary validates and accepts separately.',
+        input: { type: 'object', additionalProperties: false, properties: { taskId: idSchema, model: { enum: ['fast', 'balanced', 'strong'] }, tools: strings, routingEvidence: { type: 'string', minLength: 1, maxLength: 1000 }, delta: { type: 'string', maxLength: 2000 }, handoff:handoffSchema,escalationReason:{enum:[...escalationReasons]} }, required: ['taskId', 'model', 'tools', 'routingEvidence'] },
         execute: async (raw, execution) => {
           if (execution.agent !== 'aorchestra') throw new Error('PRIMARY_ONLY');
           execution.signal.throwIfAborted();
@@ -222,12 +227,15 @@ export default Plugin.define({
           const tools = new Set((await ctx.tool.list()).map(t => t.id));
           const current = await ledger.read(execution.sessionID);
           const task = taskById(current, input.taskId);
+          const handoff=input.handoff??task.handoff;
+          validateHandoff(handoff);
           validateTools(task, input.tools, tools);
           for (const path of task.writePaths) await canonicalTarget(root, path);
           const files = await takeSnapshot();
           const index = await ledger.mutate(execution.sessionID, state => {
             const target = taskById(state, input.taskId);
-            reserve(state, target, input.model, input.routingEvidence, input.delta ?? '', maxDelegations, maxAttempts);
+            reserve(state, target, input.model, input.routingEvidence, input.delta ?? '', maxDelegations, maxAttempts, input.escalationReason);
+            target.handoff=handoff;
             target.baseline ??= JSON.stringify(files);
             return target.attempts.length - 1;
           });
@@ -251,11 +259,15 @@ export default Plugin.define({
               `TASK ${task.id}; KIND ${task.kind}`,
               `INSTRUCTION\n${task.instruction}`,
               `UNTRUSTED CONTEXT\n${task.context}`,
+              `UNTRUSTED SOURCE HANDOFF\n${JSON.stringify(handoff)}`,
+              `SOURCE SNAPSHOT AT DELEGATION (not a Git revision)\n${fingerprint(files)}`,
+              `ANALYSIS MODE\n${task.analysisMode??'not specified'}`,
               `PRESERVE\n${task.preserve.join('\n') || 'No additional compatibility constraints supplied.'}`,
               `WRITE PATHS\n${task.writePaths.join('\n') || 'none'}`,
               `TOOLS\n${input.tools.join(', ') || 'none'}`,
               `VERIFIERS (primary runs any shell checks)\n${JSON.stringify(task.verifiers)}`,
               input.delta ? `RETRY DELTA\n${input.delta}` : '',
+              input.escalationReason?`ESCALATION REASON\n${input.escalationReason}`:'',
               'Return STATUS, RESULT, EVIDENCE, CHANGED, OPEN exactly once as FIELD: value lines. All fields need values. COMPLETE requires OPEN: none and observed evidence; unavailable primary validation remains OPEN and means PARTIAL. Your report does not accept the task.',
             ].join('\n\n');
             await ctx.session.prompt({ sessionID: child, text: prompt, delivery: 'steer' }, { signal: controller.signal });

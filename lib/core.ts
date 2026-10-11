@@ -5,17 +5,25 @@ export type Tier = 'fast' | 'balanced' | 'strong';
 export const BUNDLED_SKILL_ID = 'aorchestra-repo-context';
 export type Kind = 'analysis' | 'change' | 'verification';
 export type Verifier = { id: string; tool: string; input: Record<string, string>; expect: { exitCode?: number; contains?: string } };
+export const escalationReasons = ['reasoning-gap', 'compatibility-risk', 'security-risk', 'weak-verification'] as const;
+export type EscalationReason = typeof escalationReasons[number];
+export type Handoff = {
+  sources: Array<{ref:string;status:'observed'|'candidate';revision:string}>;
+  facts:string[]; unknowns:string[]; checks:string[];
+};
 export type Task = {
   id: string; kind: Kind; instruction: string; context: string; dependsOn: string[];
   writePaths: string[]; preserve: string[]; verifiers: Verifier[];
   status: 'pending' | 'running' | 'review' | 'blocked' | 'complete';
   attempts: Attempt[]; receipts: Record<string, { event: string; snapshot: string }>;
   baseline?: string; compatibilityReview?: string;
+  handoff?: Handoff; analysisMode?: 'lookup' | 'synthesis';
 };
 export type Attempt = {
   tier: Tier; reason: string; delta: string; child?: string;
   status: 'running' | 'review' | 'blocked' | 'error' | 'complete';
   startedAt: number; endedAt?: number; cost?: number; tokens?: unknown;
+  escalationReason?: EscalationReason;
 };
 export type State = { version: 1; revision: number; delegations: number; tasks: Task[] };
 export type Storage = { get(key: string): Promise<unknown>; set(key: string, value: unknown): Promise<void> };
@@ -146,6 +154,8 @@ export function registerTask(state: State, task: Task): void {
   if (!task.instruction.trim() || !task.verifiers.length || task.verifiers.some(v => !v.id || !Object.keys(v.input).length || (v.expect.exitCode === undefined && !v.expect.contains))) throw new Error('TASK_VERIFIER_REQUIRED');
   if (new Set(task.verifiers.map(v => v.id)).size !== task.verifiers.length) throw new Error('VERIFIER_ID_DUPLICATE');
   if (task.kind !== 'change' && task.writePaths.length) throw new Error('READ_ONLY_WRITE_SCOPE');
+  if (task.analysisMode && (task.kind!=='analysis'||!['lookup','synthesis'].includes(task.analysisMode))) throw new Error('ANALYSIS_MODE_INVALID');
+  if (task.handoff) validateHandoff(task.handoff);
   if (task.writePaths.some(path => isAbsolute(path) || win32.isAbsolute(path) || portablePath(path).split('/').includes('..') || /[*?]/.test(path) || secretPath(path))) throw new Error('EXACT_RELATIVE_WRITE_PATHS_REQUIRED');
   for (const dependency of task.dependsOn) taskById(state, dependency); // New tasks can only depend on older tasks, so cycles are impossible.
   state.tasks.push(task);
@@ -155,15 +165,25 @@ export function ready(state: State, task: Task): void {
   if (task.dependsOn.some(id => taskById(state, id).status !== 'complete')) throw new Error('DEPENDENCY_UNMET');
   if (state.tasks.some(other => other.id !== task.id && other.status === 'running')) throw new Error('ACTIVE_TASK_EXISTS');
 }
-export function reserve(state: State, task: Task, tier: Tier, reason: string, delta: string, maxDelegations: number, maxAttempts: number): Attempt {
+export function validateHandoff(handoff: Handoff | undefined): asserts handoff is Handoff {
+  if (!handoff) throw new Error('HANDOFF_REQUIRED: provide source references, facts, unknowns and checks');
+  const text=(value:unknown)=>typeof value==='string'&&value.trim().length>0&&value.length<=1600;
+  if(!Array.isArray(handoff.sources)||!handoff.sources.length||handoff.sources.length>12||handoff.sources.some(source=>!source||!text(source.ref)||!text(source.revision)||!['observed','candidate'].includes(source.status)))throw new Error('HANDOFF_SOURCES_INVALID');
+  for(const name of ['facts','unknowns','checks'] as const)if(!Array.isArray(handoff[name])||handoff[name].length>20||handoff[name].some(value=>!text(value)))throw new Error('HANDOFF_ITEMS_INVALID');
+  if(JSON.stringify(handoff).length>12000)throw new Error('HANDOFF_TOO_LARGE');
+}
+export function reserve(state: State, task: Task, tier: Tier, reason: string, delta: string, maxDelegations: number, maxAttempts: number, escalationReason?: EscalationReason): Attempt {
   ready(state, task);
   if (task.attempts.some(attempt => attempt.status === 'running')) throw new Error('ATTEMPT_RUNNING');
   if (!reason.trim() || (task.attempts.length && !delta.trim())) throw new Error('ROUTING_REASON_AND_RETRY_DELTA_REQUIRED');
+  if (task.kind==='analysis'&&tier==='fast'&&task.analysisMode!=='lookup') throw new Error('FAST_RESEARCH_REQUIRES_LOOKUP_MODE');
+  if(escalationReason&&!escalationReasons.includes(escalationReason))throw new Error('ESCALATION_REASON_INVALID');
   if (state.delegations >= maxDelegations || task.attempts.length >= maxAttempts) throw new Error('BUDGET_EXCEEDED');
   const previous = task.attempts.at(-1);
   const rank = { fast: 0, balanced: 1, strong: 2 };
-  if (previous && rank[tier] !== rank[previous.tier] && rank[tier] !== rank[previous.tier] + 1) throw new Error('ESCALATE_ONE_TIER');
-  const attempt: Attempt = { tier, reason, delta, status: 'running', startedAt: Date.now() };
+  if(previous&&rank[tier]<rank[previous.tier])throw new Error('TIER_DOWNGRADE_DENIED');
+  if(previous&&rank[tier]>rank[previous.tier]+1&&!escalationReason)throw new Error('ESCALATION_REASON_REQUIRED');
+  const attempt: Attempt = { tier, reason, delta, status: 'running', startedAt: Date.now(), ...(escalationReason?{escalationReason}:{}) };
   task.attempts.push(attempt); state.delegations++; task.status = 'running'; task.receipts = {};
   return attempt;
 }

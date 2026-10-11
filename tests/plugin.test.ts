@@ -3,6 +3,7 @@ import { mkdir, mkdtemp, writeFile, rm } from 'node:fs/promises';
 import { resolve, join } from 'node:path';
 import type { Plugin } from '@opencode/plugin';
 import plugin from '../plugins/aorchestra';
+import { Ledger, type Handoff } from '../lib/core';
 
 async function fixture() {
   const scratch = resolve(import.meta.dir, '../../../work/aorchestra-v2-tests');
@@ -13,6 +14,7 @@ async function fixture() {
   const hooks = new Map<string, (event: any) => Promise<void>>();
   const tools = new Map<string, any>();
   const creations: any[] = [];
+  const prompts: any[] = [];
   const skills: any[] = [];
   const rpc = new Map<string, any>();
   const events:any[]=[];
@@ -25,8 +27,8 @@ async function fixture() {
     session: {
       hook: async (name: string, callback: any) => { hooks.set(`session:${name}`, callback); },
       get: async ({sessionID}:any) => ({ id:sessionID,agent:sessionID==='primary'?'aorchestra':'aorchestra-executor', location:{directory:root}, cost: 0.01, tokens: { input: 10, output: 5, reasoning: 0, cache: { read: 0, write: 0 } }, outcome: 'succeeded' }),
-      create: async (input: any) => { creations.push(input); return { id: 'child-1' }; },
-      prompt: async () => {}, wait: async () => {}, interrupt: async () => {},
+      create: async (input: any) => { creations.push(input); return { id: `child-${creations.length}` }; },
+      prompt: async (input:any) => {prompts.push(input);}, wait: async () => {}, interrupt: async () => {},
       context: async () => [{ type: 'assistant', content: [{ type: 'text', text: 'STATUS: PARTIAL\nRESULT: investigated\nEVIDENCE: read api.ts\nCHANGED: none\nOPEN: primary validation' }] }],
     },
     permission: { hook: async (name: string, callback: any) => { hooks.set(`permission:${name}`, callback); } },
@@ -39,14 +41,14 @@ async function fixture() {
   const cleanup=await plugin.setup(ctx);
   const execution = { sessionID: 'primary', agent: 'aorchestra', signal: new AbortController().signal, progress: async () => {} };
   const invoke = (name: string, input: unknown) => tools.get(name).execute(input, execution);
-  const task = { id: 'api', kind: 'change', instruction: 'Preserve API', context: '', dependsOn: [], writePaths: ['api.ts'], preserve: ['oldApi export remains'], verifiers: [{ id: 'tests', tool: 'shell', input: { command: 'bun test api.test.ts' }, expect: { exitCode: 0 } }] };
+    const task = { id: 'api', kind: 'change', instruction: 'Preserve API', context: '', handoff:{sources:[{ref:'api.ts',status:'observed',revision:'unknown'}],facts:['Existing oldApi export'],unknowns:[],checks:['Regression test not run']}, dependsOn: [], writePaths: ['api.ts'], preserve: ['oldApi export remains'], verifiers: [{ id: 'tests', tool: 'shell', input: { command: 'bun test api.test.ts' }, expect: { exitCode: 0 } }] };
   const register = () => invoke('aorchestra_task', { operation: 'register', task });
   const start = () => invoke('aorchestra_task', { operation: 'start', taskId: 'api' });
   const verify = (exitCode = 0, command = 'bun test api.test.ts') => hooks.get('tool:execute.after')!({ tool: 'shell', agent: 'aorchestra', sessionID: 'primary', id: 'verifier-1', input: { command }, status: 'completed', result: { metadata: { exitCode } } });
   const accept = () => invoke('aorchestra_task', { operation: 'accept', taskId: 'api', compatibilityReview: 'oldApi export preserved and focused test passed' });
   const clean = async () => { if(cleanup)await cleanup();if (!root.startsWith(`${scratch}\\`) && !root.startsWith(`${scratch}/`)) throw new Error('TEST_CLEANUP_ESCAPE'); await rm(root, { recursive: true }); };
   const emit=(event:any)=>{events.push(event);wake?.();};
-  return { root, ctx, hooks, tools, data, creations, skills, rpc,emit, invoke, register, start, verify, accept, clean };
+  return { root, ctx, hooks, tools, data, creations, prompts, skills, rpc,emit, invoke, register, start, verify, accept, clean };
 }
 
 test('bundled repo-context is available by explicit ID without automatic invocation', async () => {
@@ -108,6 +110,35 @@ test('delegate creates native session with permissions and returns unaccepted re
     await expect(f.hooks.get('session:context')!({ agent: 'aorchestra-executor', sessionID: 'child-1', tools: {} })).rejects.toThrow('EXECUTOR_CONTRACT_INACTIVE');
     if(secondCleanup)await secondCleanup();
   } finally { await f.clean(); }
+});
+
+test('legacy tasks require a handoff before spending budget; supplying it sends provenance to the child',async()=>{
+  const f=await fixture();try{
+    await f.register();
+    const ledger=new Ledger(f.ctx.storage);
+    await ledger.mutate('primary',state=>{delete state.tasks[0].handoff;});
+    const call={taskId:'api',model:'fast',tools:['read'],routingEvidence:'Bounded known-file extraction'};
+    await expect(f.invoke('aorchestra_delegate',call)).rejects.toThrow('HANDOFF_REQUIRED');
+    expect(f.creations).toHaveLength(0);expect((await ledger.read('primary')).delegations).toBe(0);
+    const handoff:Handoff={sources:[{ref:'api.ts',status:'observed',revision:'unknown'}],facts:['oldApi is exported'],unknowns:['Consumer behavior not inspected'],checks:['Regression check not run']};
+    await f.invoke('aorchestra_delegate',{...call,handoff});
+    expect(f.prompts[0].text).toContain(JSON.stringify(handoff));
+    expect(f.prompts[0].text).toContain('SOURCE SNAPSHOT AT DELEGATION (not a Git revision)');
+    expect((await ledger.read('primary')).tasks[0].handoff).toEqual(handoff);
+  }finally{await f.clean();}
+});
+
+test('fast-to-strong retry propagates the reason and remains capped at two native children',async()=>{
+  const f=await fixture();try{
+    await f.register();const call={taskId:'api',tools:['read'],routingEvidence:'Known consumer and pattern'};
+    await f.invoke('aorchestra_delegate',{...call,model:'fast'});
+    await expect(f.invoke('aorchestra_delegate',{...call,model:'strong',delta:'Discovered another consumer'})).rejects.toThrow('ESCALATION_REASON_REQUIRED');
+    expect(f.creations).toHaveLength(1);
+    await f.invoke('aorchestra_delegate',{...call,model:'strong',delta:'Discovered another public consumer',escalationReason:'compatibility-risk'});
+    expect(f.creations).toHaveLength(2);expect(f.prompts[1].text).toContain('ESCALATION REASON\ncompatibility-risk');
+    await expect(f.invoke('aorchestra_delegate',{...call,model:'strong',delta:'Another finding'})).rejects.toThrow('BUDGET_EXCEEDED');
+    expect(f.creations).toHaveLength(2);
+  }finally{await f.clean();}
 });
 
 test('DIRECT without ledger is recorded on a native terminal event, without semantic success claims', async () => {

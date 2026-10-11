@@ -30,7 +30,7 @@ database and make zero model calls. This mode is not part of the original 0.2.2 
 
 ## Installable package (development branch)
 
-Current local checks: **46 harness/setup tests passed**, 135 assertions, plus
+Current local checks: **51 harness/setup tests passed**, 157 assertions, plus
 **13 repo-context helper tests passed**. Typecheck, package validation and the
 repository-profile native smoke check also passed.
 
@@ -55,6 +55,13 @@ config/content template overrides. This differs from smoke checking, which remai
 isolated. Discovery waits for preferred configured models during asynchronous loading.
 
 ## What these checks establish
+
+Routing/source-handoff changes are covered by tests that reject missing provenance
+before budget/session creation, deliver the handoff and source fingerprint to the
+child, restrict fast analysis to lookup, require a declared fast-to-strong reason
+and delta, and retain the two-attempt cap. These validate mechanics, not the semantic
+accuracy of model-supplied facts or routing categories. Older tasks can pass the
+handoff on delegation without re-registering under a new task id.
 
 Tests cover scope drift, stale evidence, verifier predicates, attempt escalation,
 durable budgets, cancellation and plugin callbacks with controlled APIs. Metrics
