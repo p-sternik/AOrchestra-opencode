@@ -2,6 +2,7 @@
 
 [![Validate](https://github.com/p-sternik/AOrchestra-opencode/actions/workflows/validate.yml/badge.svg)](https://github.com/p-sternik/AOrchestra-opencode/actions/workflows/validate.yml)
 [![Release](https://img.shields.io/github/v/release/p-sternik/AOrchestra-opencode)](https://github.com/p-sternik/AOrchestra-opencode/releases)
+[![Tested OpenCode](https://img.shields.io/badge/tested_OpenCode-2.0.26-blue)](VALIDATION.md)
 
 **An OpenCode harness for working on existing codebases.** One main agent owns the
 task, works directly when it makes sense, and delegates bounded work when useful.
@@ -24,6 +25,22 @@ adapted to native OpenCode V2 sessions and permissions.
 > **Status:** early-stage, tested with OpenCode **2.0.26**. Mechanism tests and CI
 > pass; effectiveness and cost on representative legacy tasks remain unmeasured.
 > See [validation results](VALIDATION.md).
+
+## How it works
+
+```mermaid
+flowchart LR
+    Request[Your task] --> Main[Main agent]
+    Main -->|Work directly| Direct[Native OpenCode tools]
+    Main -->|Delegate when useful| Worker[Scoped child session]
+    Direct --> Check[Main agent checks the result]
+    Worker --> Check
+    Check --> Result[Result and verification evidence]
+```
+
+Delegated work receives a task-specific instruction, context, tool set and model.
+The main agent owns the outcome; tracked-task acceptance is separate from a
+worker's completion report.
 
 ## Quick start
 
@@ -141,6 +158,33 @@ estimates; runtime completion alone does not establish semantic correctness.
 
 See the [technical reference](docs/reference.md) for task contracts, budgets,
 snapshot exclusions, telemetry and evaluation commands.
+
+## Design sources and evidence
+
+The original architectural source is **AOrchestra: Automating Sub-Agent Creation
+for Agentic Orchestration**, by Jianhao Ruan et al. (2026):
+[paper, arXiv v2](https://arxiv.org/abs/2602.03786v2) ·
+[reference implementation](https://github.com/FoundationAgents/AOrchestra).
+Its instruction/context/tools/model abstraction informs our dynamic delegation.
+This repository is an independent OpenCode adaptation and is not affiliated with
+the original authors.
+
+| Basis | What it supports here |
+| --- | --- |
+| AOrchestra paper and pinned source review | Dynamic agent contracts; architectural inspiration |
+| Reviews of mini-SWE, SWE-agent, OpenHands and Aider | Design choices around simplicity, recovery, verification and selective context |
+| Local tests and Windows/Linux CI | 39 harness tests and 13 repository-context helper tests |
+| Native OpenCode 2.0.26 smoke check | Plugin/session loading and controlled failure telemetry, with no model calls |
+
+Published AOrchestra benchmark results describe the original system, not this
+adaptation. Our three evaluation fixtures are a smoke corpus; representative
+real-model brownfield effectiveness and cost have not yet been measured. We do
+not implement the paper's learned routing or fine-tuning procedures.
+
+Reviewed revisions and the reasoning behind each adaptation are recorded in
+[RESEARCH.md](RESEARCH.md); test coverage and remaining gaps are in
+[VALIDATION.md](VALIDATION.md). The release badge above links to the latest
+published harness version; the OpenCode badge names the tested runtime version.
 
 ## Documentation and help
 
