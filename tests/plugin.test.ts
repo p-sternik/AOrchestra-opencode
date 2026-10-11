@@ -5,7 +5,7 @@ import type { Plugin } from '@opencode/plugin';
 import plugin from '../plugins/aorchestra';
 import { Ledger, type Handoff } from '../lib/core';
 
-async function fixture() {
+async function fixture(options: Record<string,unknown> = {}) {
   const scratch = resolve(import.meta.dir, '../../../work/aorchestra-v2-tests');
   await mkdir(scratch, { recursive: true });
   const root = await mkdtemp(join(scratch, 'run-'));
@@ -21,7 +21,7 @@ async function fixture() {
   const events:any[]=[];
   let wake:(()=>void)|undefined;
   const ctx = {
-    location: { directory: root }, options: {},
+    location: { directory: root }, options,
     storage: { get: async (key: string) => data.get(key), set: async (key: string, value: unknown) => { data.set(key, structuredClone(value)); }, scan: async ({prefix,after,limit=100}:any) => { const keys=[...data.keys()].filter(k=>k.startsWith(prefix)&&(!after||k>after)).sort(); const selected=keys.slice(0,limit);return {entries:selected.map(key=>({key,value:data.get(key)})),next:keys.length>limit?selected.at(-1):undefined}; } },
     rpc: { register: async (definition:any,handlers:any) => {rpc.set(definition.id,handlers);} },
     event: {subscribe: async function*({signal}:any) {while(!signal.aborted){if(!events.length)await new Promise<void>(resolve=>{wake=resolve;signal.addEventListener('abort',resolve,{once:true});});if(signal.aborted)return;const event=events.shift();if(event)yield event;} }},
@@ -133,10 +133,12 @@ test('fast-to-strong retry propagates the reason and remains capped at two nativ
   const f=await fixture();try{
     await f.register();const call={taskId:'api',tools:['read'],routingEvidence:'Known consumer and pattern'};
     await f.invoke('aorchestra_delegate',{...call,model:'fast'});
+    await f.invoke('aorchestra_task',{operation:'repair',taskId:'api',reason:'Discovered another public consumer'});
     await expect(f.invoke('aorchestra_delegate',{...call,model:'strong',delta:'Discovered another consumer'})).rejects.toThrow('ESCALATION_REASON_REQUIRED');
     expect(f.creations).toHaveLength(1);
     await f.invoke('aorchestra_delegate',{...call,model:'strong',delta:'Discovered another public consumer',escalationReason:'compatibility-risk'});
     expect(f.creations).toHaveLength(2);expect(f.prompts[1].text).toContain('ESCALATION REASON\ncompatibility-risk');
+    await f.invoke('aorchestra_task',{operation:'repair',taskId:'api',reason:'Another finding requires a retry'});
     await expect(f.invoke('aorchestra_delegate',{...call,model:'strong',delta:'Another finding'})).rejects.toThrow('BUDGET_EXCEEDED');
     expect(f.creations).toHaveLength(2);
   }finally{await f.clean();}
@@ -218,5 +220,66 @@ test('all unrelated agents lose harness capabilities, not just Build',async()=>{
       await f.hooks.get('permission:evaluate')!(permission);expect(permission.effect).toBe('deny');
     }
     expect((await f.rpc.get('aorchestra.metrics').list({})).runs).toHaveLength(0);
+  }finally{await f.clean();}
+});
+
+
+test('project-aware acceptance requires discovered checks and records native outcomes',async()=>{
+  const f=await fixture();try{
+    await writeFile(join(f.root,'package.json'),JSON.stringify({scripts:{test:'node --test'}}));
+    await f.register();await f.start();
+    await f.verify();await expect(f.accept()).rejects.toThrow('VERIFIER_MISSING_OR_STALE');
+    await f.verify(0,'npm run test');
+    const completed=JSON.parse((await f.accept()).content).tasks[0];
+    expect(completed.workflow.phase).toBe('complete');
+    expect(completed.workflow.events.map((e:any)=>e.phase)).toEqual(['plan','execute','verify','complete']);
+    expect(completed.verification.observations[completed.verification.verifiers[0].id].passed).toBe(true);
+  }finally{await f.clean();}
+});
+
+test('failed native rerun revokes a previous successful receipt on the same source snapshot',async()=>{
+  const f=await fixture();try{
+    await f.register();await f.start();await f.verify();await f.verify(1);
+    await expect(f.accept()).rejects.toThrow('VERIFIER_MISSING_OR_STALE');
+    const state=(await new Ledger(f.ctx.storage).read('primary')).tasks[0];
+    expect(state.receipts.tests).toBeUndefined();expect(state.verification!.observations.tests.passed).toBe(false);
+  }finally{await f.clean();}
+});
+
+test('bounded direct repairs protect edit permissions and cannot restart or invalidate away exhaustion',async()=>{
+  const f=await fixture({maxRepairs:2});try{
+    await f.register();await f.start();await f.verify(1);
+    const edit={agent:'aorchestra',sessionID:'primary',action:'edit',resources:['api.ts'],effect:'allow'};
+    await f.hooks.get('permission:evaluate')!(edit);expect(edit.effect).toBe('deny');
+    for(let cycle=0;cycle<2;cycle++){
+      await f.invoke('aorchestra_task',{operation:'repair',taskId:'api',reason:`Observed failure ${cycle+1}`});
+      const allowed={...edit,effect:'allow'};await f.hooks.get('permission:evaluate')!(allowed);expect(allowed.effect).toBe('allow');
+      await f.verify(1);
+    }
+    const blocked=JSON.parse((await f.invoke('aorchestra_task',{operation:'repair',taskId:'api',reason:'Third failure'})).content).tasks[0];
+    expect(blocked.status).toBe('blocked');expect(blocked.workflow.repairs).toBe(2);
+    await expect(f.start()).rejects.toThrow('REPAIR_BUDGET_EXCEEDED');
+    await f.invoke('aorchestra_task',{operation:'invalidate',taskId:'api',reason:'Reinspect assumptions'});
+    await expect(f.start()).rejects.toThrow('REPAIR_BUDGET_EXCEEDED');
+  }finally{await f.clean();}
+});
+
+test('resume after plugin restart preserves baseline, events, budgets and pending configured native checks',async()=>{
+  const check={id:'configured',tool:'shell',input:{command:'node integration.test.js'},expect:{exitCode:0}};
+  const f=await fixture({verification:[{paths:['api.ts'],verifiers:[check]}]});try{
+    await f.register();await f.start();
+    await f.invoke('aorchestra_task',{operation:'verify',taskId:'api'});
+    const before=await new Ledger(f.ctx.storage).read('primary');
+    const cleanup=await plugin.setup(f.ctx);
+    try{
+      const resumed=JSON.parse((await f.invoke('aorchestra_task',{operation:'resume',taskId:'api'})).content);
+      expect(resumed.tasks[0].pendingVerifiers.map((v:any)=>v.input.command)).toEqual(['bun test api.test.ts','node integration.test.js']);
+      expect(await new Ledger(f.ctx.storage).read('primary')).toEqual(before);
+      expect(f.creations).toHaveLength(0);
+      const system:any[]=[];
+      await f.hooks.get('session:context')!({agent:'aorchestra',sessionID:'primary',model:{providerID:'test',id:'main'},tools:{shell:{}},options:{},system});
+      expect(system[0].text).toContain('node integration.test.js');
+      expect((await new Ledger(f.ctx.storage).read('primary')).delegations).toBe(0);
+    }finally{if(cleanup)await cleanup();}
   }finally{await f.clean();}
 });

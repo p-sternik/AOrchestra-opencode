@@ -54,6 +54,37 @@ Model discovery retains the normal/custom credential DB and removes only explici
 config/content template overrides. This differs from smoke checking, which remains
 isolated. Discovery waits for preferred configured models during asynchronous loading.
 
+## P0 workflow and verification controller
+
+Development checks on Linux with Bun 1.2.15 and OpenCode 2.0.26: **70 harness
+and setup tests passed, 244 assertions**, plus **13 repo-context helper tests**.
+Typecheck, three-case evaluation corpus validation, version consistency,
+production package installation/import/CLI help and the repository-profile native
+smoke check passed. The smoke check made zero external model calls. Windows
+results must be read from this branch's CI; they are not inferred from Linux.
+
+New tests exercise affected-package selection in a monorepo, workspace package
+manager inheritance, configured checks for non-JavaScript paths, predicate
+deduplication, unsupported conventions/conflicting lockfiles, malformed manifests
+and symlink escapes. Controller tests cover phase transitions, read-only resume
+across plugin restart, pending-check context, fresh discovered-check acceptance,
+failed-rerun receipt revocation and repair budgets surviving restart/invalidation.
+Existing dependency, serialization, write-scope, permission, delegation and
+telemetry tests remain in the suite.
+
+These tests verify controller mechanics with native-shaped events. The no-model
+native smoke proves plugin loading and controlled failure collection, not a
+successful autonomous coding/repair loop or project-specific script outcomes.
+Real brownfield tasks, large-tree snapshot overhead and whole-workflow model cost
+remain unmeasured. No paid evaluation was run and no routing change is justified
+by these deterministic checks.
+
+For an effectiveness benchmark, use matched historical tasks from target
+repositories, identical base revisions and model/provider settings, independent
+behavior and scope checks, and report both successful and blocked/failed runs.
+Compare the prior harness with this controller before changing routing. The three
+existing evaluation fixtures are smoke coverage, not that benchmark.
+
 ## What these checks establish
 
 Routing/source-handoff changes are covered by tests that reject missing provenance

@@ -1,3 +1,5 @@
+import type { Workflow } from './workflow';
+import type { VerificationPlan } from './verification';
 import { createHash } from 'node:crypto';
 import { isAbsolute, relative, resolve, sep, win32 } from 'node:path';
 
@@ -18,6 +20,7 @@ export type Task = {
   status: 'pending' | 'running' | 'review' | 'blocked' | 'complete';
   attempts: Attempt[]; receipts: Record<string, { event: string; snapshot: string }>;
   baseline?: string; compatibilityReview?: string;
+  workflow?: Workflow; verification?: VerificationPlan;
   handoff?: Handoff; analysisMode?: 'lookup' | 'synthesis';
 };
 export type Attempt = {
