@@ -143,4 +143,3 @@ evidence. See [VALIDATION.md](../VALIDATION.md) before interpreting results.
   Provider/MCP behavior and successful real-model coding still need target-environment tests.
 - Missing events/counters can reduce telemetry coverage; incomplete records remain
   visible rather than being converted into success.
-
