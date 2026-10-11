@@ -28,7 +28,7 @@ export default Plugin.define({
   id: 'aorchestra',
   async setup(ctx) {
     const root = await realpath(ctx.location.directory);
-    // The bundled directory travels with OPENCODE_CONFIG; global skill installation is optional.
+    // Resolve the bundle relative to the installed plugin, independently of config paths.
     const skillPath = fileURLToPath(new URL('../skills/repo-context/SKILL.md', import.meta.url));
     const skillText = await readFile(skillPath, 'utf8');
     const description = /^description: (.+)$/m.exec(skillText)?.[1];

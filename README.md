@@ -43,7 +43,7 @@ This guide uses `opencode2`. If your V2 executable is named `opencode`, set
 ### 2. Run setup
 
 ```sh
-npx --yes --package=git+https://github.com/p-sternik/AOrchestra-opencode.git#main aorchestra setup
+npx --allow-git=all --ignore-scripts --yes --package=git+https://github.com/p-sternik/AOrchestra-opencode.git#main aorchestra setup
 ```
 
 No manual copying or cloning is needed. Setup:
@@ -56,6 +56,11 @@ No manual copying or cloning is needed. Setup:
 - Checks actual global loading with an isolated database and zero model calls.
 
 The GitHub default resolves main to an exact commit before registering the plugin.
+The command explicitly permits Git fetching for this invocation, as required by
+[npm 12](https://docs.npmjs.com/cli/v12/using-npm/config/#allow-git), and disables
+install lifecycle scripts. It does not change your global npm settings. Older npm
+versions may warn about the newer allow-git option; omit it if their CLI requires that.
+
 The selected source/config/backup paths are printed. Agent instructions come from
 that installed package and are stored in the global config; no checkout paths
 are required. The skill stays bundled with the plugin.
@@ -63,7 +68,7 @@ are required. The skill stays bundled with the plugin.
 For non-interactive setup, provide an available model explicitly:
 
 ```sh
-npx --yes --package=git+https://github.com/p-sternik/AOrchestra-opencode.git#main aorchestra setup --model=provider/model
+npx --allow-git=all --ignore-scripts --yes --package=git+https://github.com/p-sternik/AOrchestra-opencode.git#main aorchestra setup --model=provider/model
 ```
 
 Replace `provider/model` with an actual identifier. Existing available tier models
@@ -91,9 +96,9 @@ availability and installation checks do not establish successful provider infere
 ## Check, update and report
 
 ```sh
-npx --yes --package=git+https://github.com/p-sternik/AOrchestra-opencode.git#main aorchestra check
-npx --yes --package=git+https://github.com/p-sternik/AOrchestra-opencode.git#main aorchestra check --project=/absolute/path/to/project
-npx --yes --package=git+https://github.com/p-sternik/AOrchestra-opencode.git#main aorchestra report --project=/absolute/path/to/project --output=/path/to/report.md
+npx --allow-git=all --ignore-scripts --yes --package=git+https://github.com/p-sternik/AOrchestra-opencode.git#main aorchestra check
+npx --allow-git=all --ignore-scripts --yes --package=git+https://github.com/p-sternik/AOrchestra-opencode.git#main aorchestra check --project=/absolute/path/to/project
+npx --allow-git=all --ignore-scripts --yes --package=git+https://github.com/p-sternik/AOrchestra-opencode.git#main aorchestra report --project=/absolute/path/to/project --output=/path/to/report.md
 ```
 
 Run setup again to update to the latest GitHub commit. It replaces recognized

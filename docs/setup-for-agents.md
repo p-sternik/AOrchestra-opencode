@@ -21,6 +21,10 @@ paths/overrides are known, and any provider interaction needed is identified.
 
 ## 2. Run packaged setup
 
+Keep the documented per-command Git allowance and ignore-scripts flags for npm 12;
+the package needs no install lifecycle scripts. Do not change persistent npm
+settings to make Git installation work.
+
 Use the README's GitHub command or the exact package/revision requested by the
 user. npm registry publication is not yet available. For a non-interactive agent,
 provide `--model=provider/model`, using an observed model identifier from the

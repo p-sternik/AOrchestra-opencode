@@ -7,7 +7,12 @@ import { tmpdir } from 'node:os';
 export async function removeTemporary(directory:string,prefix:string) {
   const target=resolve(directory);
   if(dirname(target)!==resolve(tmpdir())||!basename(target).startsWith(prefix))throw new Error('TEMP_CLEANUP_ESCAPE');
-  await rm(target,{recursive:true,force:true});
+  try {await rm(target,{recursive:true,force:true,maxRetries:5,retryDelay:100});}
+  catch(error) {
+    if(['EBUSY','EPERM'].includes((error as NodeJS.ErrnoException).code??'')) {
+      console.warn(`Temporary check directory is still locked and was retained: ${target}`);
+    } else throw error;
+  }
 }
 export const binary = process.env.OPENCODE_BIN || 'opencode2';
 export async function command(args: string[], cwd: string, timeoutMs = 120_000, env: NodeJS.ProcessEnv = process.env): Promise<string> {
