@@ -1,99 +1,132 @@
-# Set up AOrchestra with a coding agent
+# Install AOrchestra globally with a coding agent
 
-Use this procedure when the user asks to install or configure AOrchestra for an
-existing project. It configures the harness; it does not start a coding task.
-For changes to this repository's implementation, follow [AGENTS.md](../AGENTS.md).
+Use this procedure when the user asks to install or configure AOrchestra for
+OpenCode V2. The default is a merge into the user's global configuration, available
+across projects. For harness development, follow [AGENTS.md](../AGENTS.md).
 
-## 1. Identify the environment
+## 1. Find the active global configuration
 
-Identify the target project, operating system, shell, install directory and
-existing OpenCode configuration. Read applicable project instructions. Check
-the actual executable versions and inspect existing configuration without
-printing credentials. Try `opencode2`; use `opencode` if that is the V2 binary.
-Inspect command help before using unfamiliar CLI options.
+Identify the OS, shell and V2 executable: try `opencode2`, or use `opencode` when
+that is V2. Verify its version against the [README prerequisites](../README.md#1-check-the-prerequisites).
+Run `<binary> debug paths` and inspect `OPENCODE_CONFIG_DIR` (a global directory
+override), `OPENCODE_CONFIG`, `OPENCODE_CONFIG_CONTENT` and XDG config settings.
+Keep the user's other executable/profile available.
 
-The supported runtime and tested prerequisites are in the
-[README](../README.md#1-check-the-prerequisites); API versions are pinned in
-package.json. If prerequisites are missing or incompatible, report the exact
-gap and resolve installation within the user's authorized scope. Keep the user's
-other OpenCode executable/profile available. Provider sign-in may require the
-user's interaction; request that interaction rather than collecting secrets.
+The usual directory is ~/.config/opencode, including on Windows, but discovered
+runtime paths take precedence over guesses about HOME or APPDATA. Inspect the
+existing opencode.json and opencode.jsonc there. In 2.0.26 JSONC loads after JSON;
+update the authoritative existing file rather than creating a competing file.
+If neither exists, create opencode.json in that global directory. Read JSONC with
+a parser/editor that preserves comments and unrelated content.
 
-**Done when:** the project and install location are known, required tools are
-available at the supported versions, and the V2 executable name is established.
-Ask only for information that cannot be established from the environment.
+`<binary> debug config` lists loaded sources when a service connection is available.
+If it cannot connect, inspect the files and use the private global check below;
+do not change a managed service's port just to complete setup. Never print
+credentials or expanded config containing secrets. Inspect CLI help for unfamiliar
+options. Resolve missing prerequisites within the user's authorized scope;
+provider sign-in may require their interaction.
 
-## 2. Prepare a separate harness checkout
+**Done when:** the supported V2 binary, permanent install directory, global config
+directory/file and relevant overrides are known. A target project is optional for
+global installation, needed only for checking project-specific overrides.
 
-Choose the latest published release unless the user requested a specific version
-or development checkout. Verify the release/tag in GitHub rather than treating
-the main branch's package version as proof of a published release. Follow the
-[download steps](../README.md#2-download-the-stable-version), substituting the
-verified tag where needed. Reuse an existing suitable checkout after inspecting
-its version and local changes; preserve existing edits.
+## 2. Install the harness in a permanent location
 
-Install dependencies from the lockfile with `npm ci --ignore-scripts`. Use the
-checkout's opencode.json as a dedicated profile outside the target project.
-Do not overwrite the user's global configuration or copy this harness's AGENTS.md
-into their project. A global merge is a separate choice only when requested.
+Use the requested version or verify the latest published GitHub release/tag.
+Until a release includes the global checker, use current main for this workflow
+and record its exact commit. Respect an explicit request to retain an older release,
+but report the validation limitation below.
+Follow the [download steps](../README.md#2-download-the-harness). Reuse a
+suitable checkout after inspecting its version/local changes; preserve edits.
+Install dependencies with `npm ci --ignore-scripts`.
 
-**Done when:** the checkout revision/version and absolute profile path are known,
-dependencies are installed, and existing user configuration remains available.
+Keep the checkout outside target projects, at a stable user-owned path. Record
+its revision and version. Back up the existing global config before merging,
+or record that the file is newly created. Do not copy the harness's AGENTS.md into
+the global config directory or target repositories.
 
-## 3. Select available models
+**Done when:** installed files/dependencies exist at the permanent location and
+the previous global config can be recovered without losing later unrelated edits.
 
-Inspect the existing provider setup and the model catalogue using the identified
-V2 binary. In 2.0.26, `<binary> models --standalone` lists models without running
-a task. A catalogue entry is not proof that authentication, billing or inference
-will succeed. Reuse the user's stated model preferences where available.
+## 3. Merge AOrchestra into the global config
 
-Update only the top-level `model` and the AOrchestra plugin's
-`options.models.fast`, `balanced` and `strong` in the dedicated profile. Use exact
-provider/model identifiers from the catalogue. If only one suitable model is
-available, all three tiers can reference it; explain that this gives no model-tier
-cost differentiation. If a selection requires an unresolved user preference or
-provider sign-in, resolve that before declaring setup complete.
+Treat the checkout's opencode.json as a template, not a replacement for the global
+file. Preserve providers, other agents/plugins, permissions, model defaults,
+compaction, warming and tool-output settings unless a relevant change is requested.
 
-Keep configured permissions and budgets. Check for duplicate AOrchestra
-registrations in the effective configuration, including project-local config.
-Preserve unrelated plugins. Read the [technical reference](reference.md) when
-resolving configuration conflicts; keep the explicit directory plugin entry and
-instruction paths intact. Do not claim provider prices or quality without evidence.
+- Merge the AOrchestra plugin entry/options and the two agents, replacing only old
+  AOrchestra entries. Preserve unrelated plugin entries and their order. The local
+  plugin target is the absolute `<install>/plugins/aorchestra` directory.
+- Rewrite both agent `system` file references to absolute instruction paths in
+  that checkout. Relative paths copied from the template would resolve against
+  the global config directory, not the install directory. Forward-slash Windows
+  paths avoid JSON backslash mistakes.
+- Inspect available models with `<binary> models --standalone`. Use observed exact
+  identifiers for fast/balanced/strong and set `agents.aorchestra.model` explicitly.
+  Retain the existing top-level model for other agents. One suitable model can fill
+  all tiers, with no tier-based price differentiation. Catalogue availability is
+  separate from authenticated inference.
+- Set `default_agent` to `aorchestra` when the user wants it as the default; explicit
+  `--agent aorchestra` works with an existing different default.
+- Preserve the AOrchestra agent permissions and worker restrictions. Skill access
+  remains restricted for the main agent. Do not blindly copy the template's
+  `-opencode.config.skill` exclusion: globally it disables skill discovery for
+  other agents too. Preserve existing skill discovery; if a same-ID repo-context
+  registration conflicts with the bundle, resolve that specific conflict. Ask
+  only when resolving it would change a separate setup the user wants to retain.
 
-**Done when:** all four model settings use observed identifiers and duplicate or
-conflicting registrations are resolved. Record model availability as catalogue
-evidence, with inference still untested.
+Check existing AOrchestra registrations in global discovery and known project-local
+configs. Keep one active plugin registration per effective location; do not remove
+unrelated project config. Inspect [reference.md](reference.md) for contract/API
+details. Restore or remove a stale OPENCODE_CONFIG template override as appropriate;
+do not install a persistent override pointing to the harness template. Report
+intentional overrides that can supersede global settings.
 
-## 4. Verify the installation
+**Done when:** valid global JSON/JSONC references the installed plugin and both
+instructions, contains observed model identifiers, and retains unrelated settings.
+Any duplicate registration, conflicting skill or relevant override is resolved.
 
-From the harness folder, set `OPENCODE_BIN` to the identified executable and run
-`bun run check`. To check loading in the actual target project, set
-`AORCHESTRA_CHECK_PROJECT` to that project's absolute path for this invocation.
-Use shell-appropriate environment syntax from the README and restore temporary
-environment changes in a reused terminal when finished.
+## 4. Check actual global loading
 
-The check reads the dedicated checkout's opencode.json. It uses a private server
-and an isolated test database, verifies the plugin, agents, child-session creation,
-bundled skill and controlled failure telemetry, and makes no external model calls.
-Inspect its exit status and observed output. Diagnose a failed check rather than
-weakening permissions or describing the installation as successful.
+From a checkout supporting this mode, set `OPENCODE_BIN` to the V2 binary and run
+`bun run check -- --global`. Set `AORCHESTRA_CHECK_PROJECT` to an existing project's
+absolute path when checking its overrides; otherwise the checker uses a neutral
+directory outside the template's config discovery path.
 
-**Done when:** the native check succeeds for the target location and reports the
-plugin/agents/skill loaded and `modelCalls: 0`. Authentication and successful model
-inference remain untested; run a real-model trial only when the user requests it.
+This check removes explicit config/content overrides in its private child process,
+uses normal global discovery and an isolated test DB, and verifies global agent
+declarations plus active plugin, native session, bundled skill and failure telemetry.
+Inspect exit status/output, including `configMode: global-discovery` and
+`modelCalls: 0`. It does not validate successful model inference or compatibility
+with every project. If the check fails, diagnose the specific conflict while
+retaining existing permissions.
 
-## 5. Hand off runnable commands
+The original 0.2.2 checker lacks --global. Its template check is not evidence of
+global installation. For an explicitly requested older release, verify loaded
+sources/plugin/agents through the native API instead, or report that global loading
+has not been verified. Do not claim the new check was run against that release.
+Restore temporary terminal variables afterwards.
 
-Return the harness version/tag and install path, executable/runtime version,
-absolute configuration path, selected models and observed check result. Provide
-commands for the user's actual shell that set `OPENCODE_CONFIG` and
-`OPENCODE_BIN`, enter their target project and run `--standalone --agent aorchestra`.
-Quote paths correctly, including spaces. Use a task placeholder rather than
-executing a coding task during setup.
+**Done when:** global discovery succeeds from a neutral directory and, if requested,
+the chosen project, with zero model calls. Remaining authentication/inference
+limits are stated. A real-model trial is run only when requested.
 
-For undoing this setup, explain how to restore the terminal's previous environment
-values (or unset newly added ones) and resume the previous profile. Report any
-remaining blockers or untested provider behavior explicitly.
+## 5. Hand off normal usage and recovery
 
-**Done when:** the user has commands with their real paths, knows what was verified
-and can return to their previous configuration.
+Return the installed version/revision/path, global config and backup paths, V2
+binary/runtime version, selected models and observed checks. Provide shell-correct
+commands using the user's project path:
+
+```text
+<change directory to project>
+<binary> run --standalone --agent aorchestra '<user task>'
+```
+
+No project config or OPENCODE_CONFIG assignment is required. Explain any relevant
+project overrides. For undo, restore the AOrchestra-related changes from the backup
+while preserving subsequent unrelated edits; restore the previous default agent
+and any environment changes. Keep the referenced install directory until the
+global plugin/instruction references are removed.
+
+**Done when:** the user can run AOrchestra from projects through the global config,
+understands observed checks/remaining gaps and can undo the installation.

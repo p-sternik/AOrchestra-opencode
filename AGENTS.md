@@ -1,8 +1,9 @@
 # Working on AOrchestra
 
 These instructions apply to development of this harness repository. When asked
-to configure it for another project, follow [docs/setup-for-agents.md](docs/setup-for-agents.md).
-Keep that project's own instructions and configuration.
+to install or configure it, follow [docs/setup-for-agents.md](docs/setup-for-agents.md):
+discover and merge the user's global OpenCode V2 config. Keep project instructions
+and project-local configuration intact.
 
 ## Changes
 

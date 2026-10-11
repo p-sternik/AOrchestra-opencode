@@ -2,6 +2,16 @@
 
 For installation and everyday use, start with the [README](../README.md).
 
+## Global installation
+
+Discover the active global directory with `opencode2 debug paths`, checking
+`OPENCODE_CONFIG_DIR` and the loaded config sources as described in the
+[setup guide](setup-for-agents.md). Merge the template into the existing global
+opencode.json/jsonc, preserving unrelated settings and JSONC comments. Use absolute
+plugin directory and instruction paths pointing to the permanent harness checkout.
+Normal use requires no project config or OPENCODE_CONFIG override. Project-local
+config can still override global settings.
+
 ## How it works
 
 The primary performs cohesive investigation/edit/test work directly. It delegates
@@ -114,6 +124,15 @@ localhost server and isolated database under `work/runtime`, tests plugin/skill
 loading and controlled failure telemetry, and makes zero external model calls.
 CI runs the deterministic checks on Windows and Linux; native smoke is a local
 runtime integration check.
+
+`bun run check` validates the repository template. `bun run check -- --global`
+validates normal global discovery instead, removing explicit config/content
+overrides from its private server environment. It checks that both agents are
+declared in loaded global documents and uses a neutral project directory by default
+to avoid the repository template overriding global config. Set
+`AORCHESTRA_CHECK_PROJECT` to test a specific project location. Both modes use an
+isolated database and make no model calls. The `--global` mode is available on main
+and in releases that include this change; the original 0.2.2 checker has no such mode.
 
 Opt-in real-model evaluation:
 

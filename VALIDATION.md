@@ -19,6 +19,15 @@ The repository adds deterministic Windows/Linux CI and version consistency check
 Check the actual Actions run for current CI results; local baseline results do not
 imply every platform or provider has been exercised.
 
+## Global configuration check (development branch)
+
+The added `check --global` mode was tested with an isolated global JSONC config,
+absolute plugin/instruction paths, a neutral location outside the harness checkout,
+and a separate project location. Explicit config/content overrides were removed
+from the private server environment. The check requires global agent and plugin
+declarations; loading the template locally is insufficient. Tests use an isolated
+database and make zero model calls. This mode is not part of the original 0.2.2 tag.
+
 ## What these checks establish
 
 Tests cover scope drift, stale evidence, verifier predicates, attempt escalation,

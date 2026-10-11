@@ -1,9 +1,16 @@
-import { resolve } from 'node:path';
-import { mkdir } from 'node:fs/promises';
+import { resolve, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { mkdir, mkdtemp, rmdir } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import { command, binary, privateClient } from './runtime';
 import { metricsRpc, type Run } from '../lib/telemetry';
 const root = resolve(import.meta.dir, '..');
-const project = resolve(process.env.AORCHESTRA_CHECK_PROJECT || root);
+const globalMode = process.argv.includes('--global');
+const scratch = resolve(root, 'work/runtime');
+// A project containing the template would override global config during discovery.
+const neutralProject = globalMode && !process.env.AORCHESTRA_CHECK_PROJECT
+  ? await mkdtemp(resolve(tmpdir(), 'aorchestra-global-check-')) : undefined;
+const project = resolve(process.env.AORCHESTRA_CHECK_PROJECT || neutralProject || root);
 const version = (await command(['--version'], root)).trim();
 if (/(\d+\.\d+\.\d+)/.exec(version)?.[1] !== '2.0.26') throw new Error(`Expected OpenCode 2.0.26; got ${version}`);
 const source = await Bun.file(resolve(root, 'opencode.json')).json();
@@ -11,12 +18,30 @@ if (!source.agents?.aorchestra || !source.agents?.['aorchestra-executor']) throw
 if (source.agent || source.agents.aorchestra.tools || source.agents['aorchestra-executor'].tools) throw new Error('LEGACY_CONFIG');
 const pkg = await Bun.file(resolve(root, 'node_modules/@opencode/plugin/package.json')).json();
 if (pkg.version !== '2.0.26') throw new Error('PLUGIN_VERSION_MISMATCH');
-const scratch = resolve(root, 'work/runtime');
 await mkdir(scratch, {recursive:true});
-const temporary=await privateClient(root,{...process.env,OPENCODE_CONFIG:resolve(root,'opencode.json'),OPENCODE_DB:resolve(scratch,'check.db')});
+const checkEnv: NodeJS.ProcessEnv = {...process.env, OPENCODE_DB:resolve(scratch, globalMode ? 'global-check.db' : 'check.db')};
+if (globalMode) {
+  delete checkEnv.OPENCODE_CONFIG;
+  delete checkEnv.OPENCODE_CONFIG_CONTENT;
+} else checkEnv.OPENCODE_CONFIG = resolve(root, 'opencode.json');
+const temporary=await privateClient(globalMode ? project : root,checkEnv);
 const {client}=temporary;
 try {
   await client.location.get({location:{directory:project}});
+  if (globalMode) {
+    const paths = await command(['debug', 'paths'], project, 120_000, checkEnv);
+    const directory = checkEnv.OPENCODE_CONFIG_DIR ?? /^config\s+(.+)$/m.exec(paths)?.[1]?.trim();
+    if (!directory) throw new Error('GLOBAL_CONFIG_DIRECTORY_UNKNOWN');
+    const entries = await client.config.get({location:{directory:project}});
+    const globalFiles = ['opencode.json','opencode.jsonc'].map(name=>resolve(directory,name));
+    const documents = entries.filter(entry=>entry.type==='document' && entry.path && globalFiles.includes(resolve(entry.path)));
+    if (!['aorchestra','aorchestra-executor'].every(id=>documents.some(entry=>entry.type==='document' && entry.info.agents?.[id]))) throw new Error('GLOBAL_AGENT_CONFIG_MISSING');
+    const registered = documents.some(entry=>entry.type==='document' && entry.info.plugins?.some(plugin=>{
+      const target = typeof plugin==='string' ? plugin : plugin.package;
+      return resolve(target.startsWith('file://') ? fileURLToPath(target) : resolve(dirname(entry.path!),target))===resolve(root,'plugins/aorchestra');
+    }));
+    if (!registered) throw new Error('GLOBAL_PLUGIN_CONFIG_MISSING');
+  }
   const bootstrap=await client.session.create({location:{directory:project}});
   let [plugins,agents]=await Promise.all([client.plugin.list({location:{directory:project}}),client.agent.list({location:{directory:project}})]);
   for(let attempt=0;attempt<20 && !plugins.data.some(p=>p.id==='aorchestra');attempt++) {
@@ -54,5 +79,5 @@ try {
   await Bun.write(resolve(scratch,'check.metrics.json'),JSON.stringify({version:1,runs:metrics!.runs},null,2));
   await client.session.remove({sessionID:session.id});
   await client.session.remove({sessionID:bootstrap.id});
-  console.log(JSON.stringify({binary,runtime:version,pluginApi:pkg.version,pluginLoaded:true,resolvedAgents:true,nativeSessionCreated:!!persisted.id,bundledSkill:true,skillAutoinvoke:false,nativeFailureTelemetry:true,modelCalls:0},null,2));
-} finally {await temporary.close();}
+  console.log(JSON.stringify({binary,runtime:version,configMode:globalMode?'global-discovery':'repository-profile',project,pluginApi:pkg.version,pluginLoaded:true,resolvedAgents:true,nativeSessionCreated:!!persisted.id,bundledSkill:true,skillAutoinvoke:false,nativeFailureTelemetry:true,modelCalls:0},null,2));
+} finally {await temporary.close(); if (neutralProject) await rmdir(neutralProject).catch(()=>{});}

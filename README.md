@@ -48,13 +48,14 @@ Give the following prompt to your coding agent. It needs access to your terminal
 and files to perform the setup; a chat-only assistant can explain the steps.
 
 ```text
-Set up AOrchestra for OpenCode V2 for my existing project.
+Install AOrchestra globally for my OpenCode V2 setup.
 Read https://raw.githubusercontent.com/p-sternik/AOrchestra-opencode/main/docs/setup-for-agents.md
-and follow its setup procedure. Ask me for the project path if you cannot identify it.
+and follow its setup procedure. Discover my active global OpenCode config and merge
+AOrchestra into it, preserving my existing settings.
 ```
 
 The [agent setup guide](docs/setup-for-agents.md) covers environment discovery,
-model selection, a separate profile and a no-inference installation check. The
+model selection, a global configuration merge and a no-inference installation check. The
 manual steps below remain available if you prefer to configure it yourself.
 
 ## Quick start
@@ -76,27 +77,30 @@ bun --version
 Python 3 is optional: only the repository-context helper and its development tests
 need it. You can run the harness without Python.
 
-### 2. Download the stable version
+### 2. Download the harness
 
 ```sh
-git clone --branch 0.2.2 https://github.com/p-sternik/AOrchestra-opencode.git
+git clone https://github.com/p-sternik/AOrchestra-opencode.git
 cd AOrchestra-opencode
 npm ci --ignore-scripts
 ```
 
-This checks out the published `0.2.2` release. Cloning does not change your global
-OpenCode configuration. If you prefer a ZIP, download the source archive from
-[GitHub Releases](https://github.com/p-sternik/AOrchestra-opencode/releases), extract
-it, open a terminal in the extracted folder and run `npm ci --ignore-scripts`.
+This downloads current main, which includes the global-installation checker.
+Until the next release, published `0.2.2` does not include that checker. Record
+`git rev-parse HEAD` for reproducibility; once a release includes it, prefer its
+tag. Cloning alone does not change your global OpenCode configuration. For a ZIP,
+use **Code → Download ZIP** for main, extract it and run `npm ci --ignore-scripts`.
+Published release archives are available under
+[GitHub Releases](https://github.com/p-sternik/AOrchestra-opencode/releases).
 
 ### 3. Choose your models
 
-Open `opencode.json` in your editor. Replace these values with models available
-through your OpenCode provider:
+Inspect the supplied `opencode.json` as a template. Choose models available
+through your OpenCode provider, then apply them to the global config in step 4:
 
 | Setting | Used for |
 | --- | --- |
-| Top-level `model` | Main agent |
+| `agents.aorchestra.model` in the global config | Main agent; the template currently uses top-level `model` |
 | Plugin options → `models.fast` | Lightweight delegated work |
 | Plugin options → `models.balanced` | General delegated work |
 | Plugin options → `models.strong` | More demanding delegated work |
@@ -104,17 +108,47 @@ through your OpenCode provider:
 Use the `provider/model` identifiers shown by your OpenCode setup. The supplied
 GitHub Copilot values are example defaults; their availability is not guaranteed.
 
-### 4. Run a task in your project
+### 4. Merge into your global OpenCode configuration
 
-Run the following **from the harness folder**. Change the project path and task
-description to match your work. The configuration path is captured before moving
-to your project, so you do not need to enter the harness path manually.
+Discover the configuration directory used by your V2 executable:
+
+```sh
+opencode2 debug paths
+```
+
+Check `OPENCODE_CONFIG_DIR` too: it overrides the normal config directory in V2.
+Open the existing `opencode.json` or `opencode.jsonc` there. If both exist, inspect
+their precedence before editing; JSONC is loaded after JSON in 2.0.26. If neither
+exists, create `opencode.json` in the discovered directory.
+
+Merge the supplied template's AOrchestra plugin/options and two agent definitions
+into that file. Keep your existing providers, other agents, plugins and settings.
+Replace the template's relative paths with **absolute paths** to the permanent
+harness installation:
+
+| Field | Example Windows value |
+| --- | --- |
+| AOrchestra plugin `package` | `C:/tools/AOrchestra-opencode/plugins/aorchestra` |
+| Main agent `system` | `{file:C:/tools/AOrchestra-opencode/instructions/aorchestra.md}` |
+| Executor `system` | `{file:C:/tools/AOrchestra-opencode/instructions/aorchestra-executor.md}` |
+
+Use your actual install path; on Linux/macOS use paths such as
+`/home/you/tools/AOrchestra-opencode/plugins/aorchestra`. The plugin target must be
+the directory, not the `.ts` file. Keep the installation at that location.
+
+Apply your chosen models from step 3. Set the AOrchestra agent's `model` to your
+main model so other agents can retain the existing top-level model. Set
+`default_agent` to `aorchestra` if you want it selected by default. Preserve unrelated
+permissions and tuning. The setup guide explains skill-discovery settings and
+duplicate registrations; use it for agent-assisted merging.
+
+### 5. Run a task in any project
+
+With the global config installed, enter your project and run:
 
 **Windows — PowerShell**
 
 ```powershell
-$env:OPENCODE_CONFIG = (Resolve-Path .\opencode.json).Path
-$env:OPENCODE_BIN = 'opencode2'
 Set-Location 'C:\projects\your-project'
 opencode2 run --standalone --agent aorchestra 'Fix the failing test. Preserve existing behavior and verify the change.'
 ```
@@ -122,18 +156,21 @@ opencode2 run --standalone --agent aorchestra 'Fix the failing test. Preserve ex
 **Linux / macOS / WSL — shell**
 
 ```sh
-export OPENCODE_CONFIG="$(pwd)/opencode.json"
-export OPENCODE_BIN=opencode2
 cd /absolute/path/to/your-project
 opencode2 run --standalone --agent aorchestra 'Fix the failing test. Preserve existing behavior and verify the change.'
 ```
 
-The same terminal keeps the selected profile for subsequent tasks. OpenCode's
-configured permissions still apply, including requests to run shell commands.
+No project config or per-terminal `OPENCODE_CONFIG` override is needed. If you
+previously set a template override, remove it or restore its prior value. Existing
+project-local config can override global settings. OpenCode's configured permissions
+still apply, including requests to run shell commands.
 
-**Optional installation check:** from the harness folder, run `bun run check`.
-It checks native plugin loading using an isolated test database and makes no
-external model calls.
+**Installation check:** from a current main checkout, run
+`bun run check -- --global` (set `OPENCODE_BIN` if your V2 binary is named `opencode`).
+It checks global loading from a neutral location, uses an isolated test database
+and makes no model calls. For a particular project, set `AORCHESTRA_CHECK_PROJECT`
+to its absolute path. This mode is new on main; the original 0.2.2 checker only
+validates its repository template and does not confirm your global installation.
 
 ## Everyday use
 
