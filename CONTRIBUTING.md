@@ -60,9 +60,11 @@ npm run pack:check
 npm publish --access public
 ```
 
-No npm token is stored in this repository or release workflow. GitHub Releases do
-not automatically publish npm packages. Update README distribution status only
-after confirming the registry publication.
+No npm token is stored in this repository or release workflow. Automatic npm
+publication uses the publish-npm job in release.yml and requires the package owner's
+Trusted Publisher configuration plus NPM_PUBLISH_ENABLED=true. Follow the
+[publishing guide](docs/npm-publishing.md). Update README distribution status only
+after confirming an actual registry upload.
 
 Compare releases:
 

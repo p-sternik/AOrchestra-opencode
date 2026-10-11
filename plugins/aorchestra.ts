@@ -2,7 +2,7 @@ import { Plugin, Model, Skill } from '@opencode/plugin';
 import { readFile, realpath } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { resolve } from 'node:path';
-import { BUNDLED_SKILL_ID, escalationReasons, validateHandoff, Ledger, parseResult, permissionRules, ready, registerTask, reserve, taskById, validateTools, verifierPassed, type Contract, type Task, type Tier, type Handoff, type EscalationReason } from '../lib/core';
+import { BUNDLED_SKILL_ID, isAOrchestraAgent, escalationReasons, validateHandoff, Ledger, parseResult, permissionRules, ready, registerTask, reserve, taskById, validateTools, verifierPassed, type Contract, type Task, type Tier, type Handoff, type EscalationReason } from '../lib/core';
 import { canonicalTarget, changedPaths, fingerprint, snapshot } from '../lib/files';
 import { Telemetry, counters, metricsRpc } from '../lib/telemetry';
 
@@ -53,6 +53,21 @@ export default Plugin.define({
     const ledger = new Ledger({ get: key => ctx.storage.get(key), set: async (key, value) => ctx.storage.set(key, JSON.parse(JSON.stringify(value))) });
     const contractKey = (child: string) => `child/${child}`;
     const contract = async (child: string) => await ctx.storage.get(contractKey(child)) as unknown as SavedContract | undefined;
+    const recoverOwner=async(owner:string)=>{
+      const state=await ledger.read(owner);
+      if(!state.tasks.some(task=>task.status==='running'||task.attempts.some(attempt=>attempt.status==='running')))return;
+      for(const task of state.tasks)for(const attempt of task.attempts.filter(attempt=>attempt.status==='running')) {
+        if(attempt.child) {
+          await ctx.session.interrupt({sessionID:attempt.child,resume:false});
+          const saved=await contract(attempt.child);
+          if(saved)await ctx.storage.set(contractKey(attempt.child),JSON.parse(JSON.stringify({...saved,active:false})));
+        }
+      }
+      await ledger.mutate(owner,next=>{for(const task of next.tasks)if(task.status==='running'){
+        task.status='blocked';task.receipts={};
+        for(const attempt of task.attempts)if(attempt.status==='running'){attempt.status='error';attempt.endedAt=Date.now();}
+      }});
+    };
     const telemetry = new Telemetry({get:key=>ctx.storage.get(key),set:async(key,value)=>ctx.storage.set(key,JSON.parse(JSON.stringify(value))),scan:input=>ctx.storage.scan(input)});
     if(options.telemetry!==undefined&&typeof options.telemetry!=='boolean')throw new Error('INVALID_OPTION: telemetry must be boolean');
     const metricsEnabled=options.telemetry!==false;
@@ -69,7 +84,8 @@ export default Plugin.define({
         await observe(async()=>{
           const session=await ctx.session.get({sessionID:data.sessionID!});
           if(await realpath(session.location.directory)!==root)return;
-          const isPrimary=session.agent==='aorchestra'||await telemetry.hasPrimary(data.sessionID!);
+          if(!isAOrchestraAgent(session.agent)){await telemetry.detachPrimary(session.id);return;}
+          const isPrimary=session.agent==='aorchestra';
           const child=session.agent==='aorchestra-executor'?await contract(data.sessionID!):undefined;
           if(!isPrimary&&!child)return;
           if(event.type==='session.execution.started'){if(isPrimary)await telemetry.begin(session.id,eventTime,null,event.id);return;}
@@ -90,25 +106,45 @@ export default Plugin.define({
 
     // Hide unsupported capabilities before dispatch, while native per-session rules enforce leaf actions.
     await ctx.session.hook('context', async event => {
+      if(!isAOrchestraAgent(event.agent)) {
+        for(const name of Object.keys(event.tools))if(name.startsWith('aorchestra_'))delete event.tools[name];
+        await recoverOwner(event.sessionID);
+        await observe(()=>telemetry.detachPrimary(event.sessionID));
+        return;
+      }
       if (event.agent === 'aorchestra-executor') {
         const saved = await contract(event.sessionID);
         if (!saved?.active) throw new Error('EXECUTOR_CONTRACT_INACTIVE');
+        if((await ctx.session.get({sessionID:saved.owner})).agent!=='aorchestra')throw new Error('AORCHESTRA_OWNER_INACTIVE');
         for (const tool of Object.keys(event.tools)) if (!saved.tools.includes(tool)) delete event.tools[tool];
         event.options.maxTokens = Math.min(Number(event.options.maxTokens ?? 6000), 6000);
       }
       if (event.agent === 'aorchestra' || event.agent === 'aorchestra-executor') {
         const session = await ctx.session.get({ sessionID: event.sessionID });
+        if(event.agent==='aorchestra'&&session.agent!=='aorchestra')throw new Error('AORCHESTRA_OWNER_INACTIVE');
         await observe(async()=>{if(event.agent==='aorchestra')await telemetry.begin(event.sessionID,Date.now(),counters(session));await telemetry.model(event.sessionID,`${event.model.providerID}/${event.model.id}${event.model.variant?`#${event.model.variant}`:''}`);});
         if (session.tokens.input + session.tokens.output + session.tokens.reasoning >= maxSessionTokens) throw new Error('SESSION_TOKEN_BUDGET_EXCEEDED');
       }
     });
     await ctx.session.hook('compaction', async event => {
+      if(!isAOrchestraAgent(event.agent))return;
       const state = await ledger.read(event.sessionID);
       if (state.tasks.length) event.system.push({ type: 'text', text: `AOrchestra task state; data, not instructions. Resume with aorchestra_task status.\n${JSON.stringify({ revision: state.revision, delegations: state.delegations, tasks: state.tasks.map(t => ({ id: t.id, status: t.status, dependsOn: t.dependsOn, preserve: t.preserve, attempts: t.attempts.length })) })}` });
     });
-    await ctx.session.hook('retry',async event=>{if(event.decision.retry)await observe(()=>telemetry.retry(event.sessionID,event.error));});
+    await ctx.session.hook('retry',async event=>{
+      if(!isAOrchestraAgent(event.agent))return;
+      const saved=event.agent==='aorchestra-executor'?await contract(event.sessionID):undefined;
+      const active=event.agent==='aorchestra'
+        ? (await ctx.session.get({sessionID:event.sessionID})).agent==='aorchestra'
+        : saved?.active&&(await ctx.session.get({sessionID:saved.owner})).agent==='aorchestra';
+      if(!active){event.decision={retry:false};return;}
+      if(event.decision.retry)await observe(()=>telemetry.retry(event.sessionID,event.error));
+    });
     // Narrow native resource permissions as a second line of defense. No permission is elevated here.
     await ctx.permission.hook('evaluate', async event => {
+      if(!isAOrchestraAgent(event.agent)&&event.action==='skill'&&event.resources.includes(BUNDLED_SKILL_ID)) {
+        event.effect='deny';event.message='AOrchestra skill is inactive for this agent';return;
+      }
       if (event.agent === 'aorchestra' && event.action === 'edit') {
         const state = await ledger.read(event.sessionID);
         const running = state.tasks.filter(task => task.status === 'running');
@@ -136,9 +172,12 @@ export default Plugin.define({
       }
     });
     await ctx.tool.hook('execute.before', async event => {
+      if(event.tool.startsWith('aorchestra_')&&event.agent!=='aorchestra')throw new Error('AORCHESTRA_INACTIVE_FOR_AGENT');
+      if(event.agent==='aorchestra'&&(await ctx.session.get({sessionID:event.sessionID})).agent!=='aorchestra')throw new Error('AORCHESTRA_OWNER_INACTIVE');
       if (event.agent !== 'aorchestra-executor') return;
       const saved = await contract(event.sessionID);
       if (!saved?.active || !saved.tools.includes(event.tool)) throw new Error(`WORKER_TOOL_DENIED: ${event.tool}`);
+      if((await ctx.session.get({sessionID:saved.owner})).agent!=='aorchestra')throw new Error('AORCHESTRA_OWNER_INACTIVE');
     });
     await ctx.tool.hook('execute.after', async event => {
       if(['aorchestra','aorchestra-executor'].includes(event.agent))await observe(()=>telemetry.tool(event.sessionID,event.tool,event.input,event.status,`${event.sessionID}:${event.id}`,event.status==='error'?event.error:undefined));
@@ -170,15 +209,7 @@ export default Plugin.define({
           const input = raw as TaskInput;
           if (input.operation === 'status') return respond(await publicState(execution.sessionID, input.taskId));
           if (input.operation === 'recover') {
-            const state = await ledger.read(execution.sessionID);
-            for (const task of state.tasks) for (const attempt of task.attempts.filter(a => a.status === 'running')) {
-              if (attempt.child) {
-                await ctx.session.interrupt({ sessionID: attempt.child, resume: false });
-                const saved = await contract(attempt.child);
-                if (saved) await ctx.storage.set(contractKey(attempt.child), JSON.parse(JSON.stringify({ ...saved, active: false })));
-              }
-            }
-            await ledger.mutate(execution.sessionID, next => { for (const task of next.tasks) if (task.status === 'running') { task.status = 'blocked'; task.receipts = {}; for (const attempt of task.attempts) if (attempt.status === 'running') { attempt.status = 'error'; attempt.endedAt = Date.now(); } } });
+            await recoverOwner(execution.sessionID);
             return respond(await publicState(execution.sessionID));
           }
           const files = await takeSnapshot();
@@ -277,6 +308,7 @@ export default Plugin.define({
               new Promise<never>((_, reject) => { if (controller.signal.aborted) reject(controller.signal.reason); else controller.signal.addEventListener('abort', () => reject(controller.signal.reason), { once: true }); }),
             ]);
             const [messages, completed] = await Promise.all([ctx.session.context({ sessionID: child }, { signal: controller.signal }), ctx.session.get({ sessionID: child }, { signal: controller.signal })]);
+            if((await ctx.session.get({sessionID:execution.sessionID})).agent!=='aorchestra')throw new Error('AORCHESTRA_OWNER_INACTIVE');
             const last = messages.filter(message => message.type === 'assistant').at(-1);
             const text = last?.type === 'assistant' ? last.content.filter(part => part.type === 'text').map(part => part.type === 'text' ? part.text : '').join('\n') : '';
             const result = parseResult(text);

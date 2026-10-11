@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { mkdir, mkdtemp, writeFile, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, writeFile, rm } from 'node:fs/promises';
 import { resolve, join } from 'node:path';
 import type { Plugin } from '@opencode/plugin';
 import plugin from '../plugins/aorchestra';
@@ -15,6 +15,7 @@ async function fixture() {
   const tools = new Map<string, any>();
   const creations: any[] = [];
   const prompts: any[] = [];
+  let currentAgent='aorchestra';
   const skills: any[] = [];
   const rpc = new Map<string, any>();
   const events:any[]=[];
@@ -26,7 +27,7 @@ async function fixture() {
     event: {subscribe: async function*({signal}:any) {while(!signal.aborted){if(!events.length)await new Promise<void>(resolve=>{wake=resolve;signal.addEventListener('abort',resolve,{once:true});});if(signal.aborted)return;const event=events.shift();if(event)yield event;} }},
     session: {
       hook: async (name: string, callback: any) => { hooks.set(`session:${name}`, callback); },
-      get: async ({sessionID}:any) => ({ id:sessionID,agent:sessionID==='primary'?'aorchestra':'aorchestra-executor', location:{directory:root}, cost: 0.01, tokens: { input: 10, output: 5, reasoning: 0, cache: { read: 0, write: 0 } }, outcome: 'succeeded' }),
+      get: async ({sessionID}:any) => ({ id:sessionID,agent:sessionID==='primary'?currentAgent:'aorchestra-executor', location:{directory:root}, cost: 0.01, tokens: { input: 10, output: 5, reasoning: 0, cache: { read: 0, write: 0 } }, outcome: 'succeeded' }),
       create: async (input: any) => { creations.push(input); return { id: `child-${creations.length}` }; },
       prompt: async (input:any) => {prompts.push(input);}, wait: async () => {}, interrupt: async () => {},
       context: async () => [{ type: 'assistant', content: [{ type: 'text', text: 'STATUS: PARTIAL\nRESULT: investigated\nEVIDENCE: read api.ts\nCHANGED: none\nOPEN: primary validation' }] }],
@@ -48,7 +49,7 @@ async function fixture() {
   const accept = () => invoke('aorchestra_task', { operation: 'accept', taskId: 'api', compatibilityReview: 'oldApi export preserved and focused test passed' });
   const clean = async () => { if(cleanup)await cleanup();if (!root.startsWith(`${scratch}\\`) && !root.startsWith(`${scratch}/`)) throw new Error('TEST_CLEANUP_ESCAPE'); await rm(root, { recursive: true }); };
   const emit=(event:any)=>{events.push(event);wake?.();};
-  return { root, ctx, hooks, tools, data, creations, prompts, skills, rpc,emit, invoke, register, start, verify, accept, clean };
+  return { root, ctx, hooks, tools, data, creations, prompts, skills, rpc,emit, invoke, register, start, verify, accept, clean, switchAgent:(agent:string)=>{currentAgent=agent;} };
 }
 
 test('bundled repo-context is available by explicit ID without automatic invocation', async () => {
@@ -158,4 +159,64 @@ test('cancelled parent does not reserve budget or create a child', async () => {
     await expect(f.tools.get('aorchestra_delegate').execute({ taskId: 'api', model: 'fast', tools: ['read'], routingEvidence: 'Known path' }, { sessionID: 'primary', agent: 'aorchestra', signal: controller.signal, progress: async () => {} })).rejects.toThrow();
     expect(f.creations.length).toBe(0);
   } finally { await f.clean(); }
+});
+
+test('switching to Build hides harness tools and leaves compaction, retry and permissions alone',async()=>{
+  const f=await fixture();try{
+    await f.register();
+    await f.hooks.get('session:context')!({agent:'aorchestra',sessionID:'primary',model:{providerID:'test',id:'main'},tools:{read:{}},options:{}});
+    f.switchAgent('build');
+    const tools={read:{},aorchestra_task:{},aorchestra_delegate:{},external_tool:{}};
+    const options={maxTokens:321};
+    await f.hooks.get('session:context')!({agent:'build',sessionID:'primary',tools,options});
+    expect(Object.keys(tools)).toEqual(['read','external_tool']);expect(options.maxTokens).toBe(321);
+    const system:unknown[]=[];
+    await f.hooks.get('session:compaction')!({agent:'build',sessionID:'primary',system});expect(system).toEqual([]);
+    const decision={retry:true,delay:10};await f.hooks.get('session:retry')!({agent:'build',sessionID:'primary',decision,error:'example'});expect(decision).toEqual({retry:true,delay:10});
+    const permission={agent:'build',sessionID:'primary',action:'edit',resources:['other.ts'],effect:'allow'};
+    await f.hooks.get('permission:evaluate')!(permission);expect(permission.effect).toBe('allow');
+    const rows=(await f.rpc.get('aorchestra.metrics').list({})).runs;
+    expect(rows).toHaveLength(1);expect(rows[0].observationIssue).toBe('agent-switched');expect(rows[0].endedAt).toBe(null);expect(rows[0].providerRetries).toBe(0);
+  }finally{await f.clean();}
+});
+
+test('an active child loses tool access when its owner switches away from AOrchestra',async()=>{
+  const f=await fixture();try{
+    await f.register();
+    f.ctx.session.wait=async()=>{
+      f.switchAgent('build');
+      await f.hooks.get('tool:execute.before')!({agent:'aorchestra-executor',sessionID:'child-1',tool:'patch'});
+    };
+    await expect(f.invoke('aorchestra_delegate',{taskId:'api',model:'fast',tools:['read','patch'],routingEvidence:'Known source'})).rejects.toThrow('AORCHESTRA_OWNER_INACTIVE');
+    expect(await readFile(join(f.root,'api.ts'),'utf8')).toBe('export const oldApi = true;\n');
+  }finally{await f.clean();}
+});
+
+test('Build context interrupts outstanding children and blocks stale primary work',async()=>{
+  const f=await fixture();try{
+    await f.register();const interrupted:string[]=[];
+    f.ctx.session.interrupt=async input=>{interrupted.push(input.sessionID);return {interrupted:true};};
+    f.ctx.session.wait=async()=>{
+      f.switchAgent('build');
+      await f.hooks.get('session:context')!({agent:'build',sessionID:'primary',tools:{},options:{}});
+      await expect(f.hooks.get('tool:execute.before')!({agent:'aorchestra',sessionID:'primary',tool:'read'})).rejects.toThrow('AORCHESTRA_OWNER_INACTIVE');
+    };
+    await expect(f.invoke('aorchestra_delegate',{taskId:'api',model:'fast',tools:['read'],routingEvidence:'Known source'})).rejects.toThrow('AORCHESTRA_OWNER_INACTIVE');
+    expect(interrupted).toContain('child-1');
+    expect((await new Ledger(f.ctx.storage).read('primary')).tasks[0].status).toBe('blocked');
+  }finally{await f.clean();}
+});
+
+test('all unrelated agents lose harness capabilities, not just Build',async()=>{
+  const f=await fixture();try{
+    for(const agent of ['build','plan','research','custom-agent']) {
+      const tools={read:{},aorchestra_task:{},aorchestra_delegate:{}};
+      await f.hooks.get('session:context')!({agent,sessionID:'other',tools,options:{}});
+      expect(Object.keys(tools)).toEqual(['read']);
+      await expect(f.hooks.get('tool:execute.before')!({agent,sessionID:'other',tool:'aorchestra_task'})).rejects.toThrow('AORCHESTRA_INACTIVE_FOR_AGENT');
+      const permission={agent,sessionID:'other',action:'skill',resources:['aorchestra-repo-context'],effect:'allow'};
+      await f.hooks.get('permission:evaluate')!(permission);expect(permission.effect).toBe('deny');
+    }
+    expect((await f.rpc.get('aorchestra.metrics').list({})).runs).toHaveLength(0);
+  }finally{await f.clean();}
 });

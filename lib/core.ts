@@ -3,6 +3,7 @@ import { isAbsolute, relative, resolve, sep, win32 } from 'node:path';
 
 export type Tier = 'fast' | 'balanced' | 'strong';
 export const BUNDLED_SKILL_ID = 'aorchestra-repo-context';
+export const isAOrchestraAgent = (agent:string|null|undefined) => agent==='aorchestra'||agent==='aorchestra-executor';
 export type Kind = 'analysis' | 'change' | 'verification';
 export type Verifier = { id: string; tool: string; input: Record<string, string>; expect: { exitCode?: number; contains?: string } };
 export const escalationReasons = ['reasoning-gap', 'compatibility-risk', 'security-risk', 'weak-verification'] as const;

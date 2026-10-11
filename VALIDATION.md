@@ -30,7 +30,7 @@ database and make zero model calls. This mode is not part of the original 0.2.2 
 
 ## Installable package (development branch)
 
-Current local checks: **51 harness/setup tests passed**, 157 assertions, plus
+Current local checks: **55 harness/setup tests passed**, 185 assertions, plus
 **13 repo-context helper tests passed**. Typecheck, package validation and the
 repository-profile native smoke check also passed.
 
@@ -76,6 +76,15 @@ failure lifecycle collection without paid inference. These records are integrati
 test data, not evidence of user productivity or routing ROI.
 
 ## What remains unproven
+
+Build/other-agent isolation is covered by controlled callback tests: harness tools
+are hidden, old task state is not injected into compaction, retries/permissions
+remain unchanged, switched-agent telemetry is incomplete rather than contaminated,
+and outstanding children are interrupted/blocked. Global plugin discovery logs
+remain normal; plugin loading is distinct from agent execution.
+
+npm OIDC publishing is configured but disabled until its owner enables the
+repository variable and configures npm. No registry upload is claimed.
 
 Successful model-driven DIRECT/delegated coding, semantic compatibility on real
 legacy systems, model availability/prices, provider-specific native exit metadata,

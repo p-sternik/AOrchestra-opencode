@@ -4,6 +4,8 @@
 [![Release](https://img.shields.io/github/v/release/p-sternik/AOrchestra-opencode)](https://github.com/p-sternik/AOrchestra-opencode/releases)
 [![Tested OpenCode](https://img.shields.io/badge/tested_OpenCode-2.0.26-blue)](VALIDATION.md)
 
+**Current release: 0.3.0** <!-- x-release-please-version -->
+
 **An OpenCode harness for working on existing codebases.** One main agent owns the
 task, works directly when it makes sense and delegates bounded work when useful.
 It favors existing patterns, small patches and compatibility checks.
@@ -22,6 +24,11 @@ adapted to native OpenCode V2 sessions, permissions and plugin storage.
 > representative real-model brownfield effectiveness and cost remain unmeasured.
 > See [validation results](VALIDATION.md). The installable package is currently
 > distributed from GitHub main; the original 0.2.2 release predates this installer.
+
+When any other agent is selected, harness tools and task-state
+injection are inactive. A globally installed plugin still appears in OpenCode's
+discovery/loading logs; that does not mean AOrchestra is executing the task.
+The internal executor requires an active contract owned by the AOrchestra agent.
 
 ## Install globally
 
@@ -188,9 +195,11 @@ for observed checks and remaining gaps.
 | Test coverage | [Validation](VALIDATION.md) |
 | Changes between releases | [Changelog](CHANGELOG.md) |
 | Development, packaging and releases | [Contributing](CONTRIBUTING.md) |
+| Automatic npm publication | [Publisher setup](docs/npm-publishing.md) |
 
 Maintained by [Piotr Sternik](https://github.com/p-sternik). For bugs or questions,
 [open an issue](https://github.com/p-sternik/AOrchestra-opencode/issues) with the
 installed package spec/version, OpenCode version, OS and a minimal reproduction.
 Release Please prepares version/changelog PRs; merging one publishes a Git tag
-and GitHub Release. npm publication is a separate authenticated operation.
+and GitHub Release. npm publication runs in the same workflow after the owner
+configures Trusted Publishing and enables its repository variable.

@@ -14,7 +14,7 @@ export type Run = {
   taskIDs: string[]; tasks: Array<{id: string; status: string; expectedVerifiers: number; observedVerifiers: number}>;
   children: Array<{sessionID: string; taskID: string; tier: string; attempt: number; ref: string; outcome: string; usage: Counters | null}>;
   terminalRef: string | null;
-  startedRef: string | null; observationIssue?: 'terminal-not-observed';
+  startedRef: string | null; observationIssue?: 'terminal-not-observed' | 'agent-switched';
 };
 type SessionState = { active?: Run };
 export type MetricsStorage = { get(key: string): Promise<unknown>; set(key: string, value: unknown): Promise<void>; scan(options: {prefix: string; after?: string; limit?: number}): Promise<{entries: readonly {key: string; value: unknown}[]; next?: string}> };
@@ -75,6 +75,15 @@ export class Telemetry {
   }
   async model(actor: string, model: string): Promise<void> {const link=await this.owner(actor);await this.mutate(link.owner, s=>{if(s.active&&(!link.runID||s.active.id===link.runID))s.active.models[model]=(s.active.models[model]??0)+1;});}
   async hasPrimary(owner:string):Promise<boolean>{return Boolean((await this.storage.get(`metrics/session/${owner}`) as SessionState|undefined)?.active);}
+  async detachPrimary(owner:string):Promise<void>{
+    if(!await this.hasPrimary(owner))return;
+    await this.mutate(owner,async state=>{
+      if(!state.active)return;
+      state.active.observationIssue='agent-switched';
+      await this.storage.set(`metrics/run/${state.active.id}`,JSON.parse(JSON.stringify(state.active)));
+      delete state.active;
+    });
+  }
   async child(owner: string, sessionID: string, taskID: string, tier: string, attempt: number, ref: string): Promise<void> {
     await this.mutate(owner, async s=>{
       if(!s.active)return;
