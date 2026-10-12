@@ -14,8 +14,8 @@ package owner's trusted publisher configuration. Verify both before a new releas
 
 ## 1. Confirm the existing package
 
-Version 0.3.0 is already available on npm. Confirm the package and its owner access
-before configuring the trusted publisher:
+The package is already available on npm. Confirm its latest published version and
+owner access before configuring the trusted publisher:
 
 ```sh
 npm view aorchestra-opencode-v2 version

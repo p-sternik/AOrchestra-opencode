@@ -47,6 +47,13 @@ an infrastructure failure. Do not edit an existing released tag or manually bump
 the version during normal development. Telemetry imports package.json so there
 is no second runtime version string to update.
 
+README uses dynamic npm and GitHub release badges rather than a second literal
+harness version. The npm badge reflects registry publication; the GitHub badge
+reflects release creation. The tested OpenCode version stays explicit and changes
+only after compatibility validation. README content bundled in a published npm
+archive remains the documentation for that release; publishing a new release does
+not rewrite older archives.
+
 The initial 0.2.2 release is bootstrapped manually. Earlier local 0.2.0/0.2.1
 iterations are recorded as context in its changelog, not invented historical tags.
 
@@ -71,8 +78,9 @@ npm publish --access public
 No npm token is stored in this repository or release workflow. Automatic npm
 publication uses the publish-npm job in release.yml and requires the package owner's
 Trusted Publisher configuration plus NPM_PUBLISH_ENABLED=true. Follow the
-[publishing guide](docs/npm-publishing.md). Version 0.3.0 is available on npm;
-describe a new version as published only after confirming its registry upload. Retries verify registry archive integrity
+[publishing guide](docs/npm-publishing.md). Check `npm view aorchestra-opencode-v2 version`
+for the latest published version; describe a new version as published only after
+confirming its registry upload. Retries verify registry archive integrity
 against the exact release tag before skipping an existing version.
 
 Compare releases:

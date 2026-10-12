@@ -9,8 +9,6 @@ if (!/^\d+\.\d+\.\d+$/.test(pkg.version) || versions.some(version => version !==
   throw new Error(`Version mismatch: ${JSON.stringify(versions)}`);
 }
 const changelog = await Bun.file(new URL('CHANGELOG.md', root)).text();
-const readme=await Bun.file(new URL('README.md',root)).text();
-if(!readme.includes(`**Current release: ${pkg.version}** <!-- x-release-please-version -->`))throw new Error('README_VERSION_MISMATCH');
 if (!changelog.includes(`## ${pkg.version}`) && !changelog.includes(`## [${pkg.version}]`)) {
   throw new Error(`Missing changelog entry for ${pkg.version}`);
 }
