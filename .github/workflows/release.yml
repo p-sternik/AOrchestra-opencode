@@ -77,20 +77,31 @@ jobs:
       - run: npm ci --ignore-scripts
       - run: bun run typecheck
       - run: bun run test
+      - run: bun scripts/version-check.ts
       - run: npm run pack:check
-      - name: Check registry version
+      - name: Pack release and verify registry integrity
         id: registry
         run: |
           node --input-type=module <<'JS'
           import fs from 'node:fs';
+          import { execFileSync } from 'node:child_process';
           const p=JSON.parse(fs.readFileSync('package.json','utf8'));
+          const [packed]=JSON.parse(execFileSync('npm',['pack','--json','--ignore-scripts'],{encoding:'utf8'}));
+          if(!packed?.filename || !packed?.integrity)throw new Error('Packed archive metadata missing');
           const response=await fetch(`https://registry.npmjs.org/${encodeURIComponent(p.name)}/${p.version}`);
           if(response.status!==200&&response.status!==404)throw new Error(`Registry HTTP ${response.status}`);
-          fs.appendFileSync(process.env.GITHUB_OUTPUT,`exists=${response.status===200}\n`);
+          if(response.status===200){
+            const published=await response.json();
+            if(published.name!==p.name || published.version!==p.version || published.dist?.integrity!==packed.integrity)
+              throw new Error('Published version differs from the tagged package; investigate without replacing the immutable version');
+          }
+          fs.appendFileSync(process.env.GITHUB_OUTPUT,`exists=${response.status===200}\narchive=${packed.filename}\n`);
           JS
       - name: Publish with npm Trusted Publishing
         if: steps.registry.outputs.exists != 'true'
-        run: npm publish --provenance --access public --ignore-scripts
+        env:
+          RELEASE_ARCHIVE: ${{ steps.registry.outputs.archive }}
+        run: npm publish "$RELEASE_ARCHIVE" --provenance --access public --ignore-scripts
       - name: Already published
         if: steps.registry.outputs.exists == 'true'
-        run: echo "This version is already published; no upload was attempted."
+        run: echo "Registry integrity matches the tagged package; no upload was attempted."

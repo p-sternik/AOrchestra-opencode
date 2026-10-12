@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { createInterface } from 'node:readline/promises';
 import { stdin, stdout } from 'node:process';
 import { Npm } from '@opencode/util/npm';
-import { mergeSetup, readConfig, saveConfig, isAOrchestraTarget, globalEnvironment, type Models } from '../lib/setup';
+import { mergeSetup, readConfig, saveConfig, isAOrchestraTarget, globalEnvironment, primaryPermissions, setupPackage, assertSetupVersion, type Models } from '../lib/setup';
 import { command, binary, privateClient, removeTemporary } from './runtime';
 import pkg from '../package.json';
 
@@ -13,7 +13,7 @@ const args = process.argv.slice(2);
 const operation = args[0];
 const value = (name:string)=>args.find(arg=>arg.startsWith(`--${name}=`))?.slice(name.length+3);
 if (!operation || args.includes('--help') || operation==='help') {
-  console.log(`AOrchestra ${pkg.version}\n\nUsage: aorchestra setup [--model=provider/model] [--fast=...] [--balanced=...] [--strong=...] [--default] [--package=npm-or-git-spec]\n       aorchestra check [--project=/path]\n       aorchestra report [report options]\n\nRequires Bun and OpenCode 2.0.26. Set OPENCODE_BIN if V2 is not named opencode2.\nSetup preserves global JSONC and makes no model calls. Git distribution is available; npm publication is separate.`);
+  console.log(`AOrchestra ${pkg.version}\n\nUsage: aorchestra setup [--model=provider/model] [--fast=...] [--balanced=...] [--strong=...] [--default] [--channel=stable|main | --package=npm-or-git-spec]\n       aorchestra check [--project=/path]\n       aorchestra report [report options]\n\nRequires Bun and OpenCode 2.0.26. Set OPENCODE_BIN if V2 is not named opencode2.\nSetup preserves global JSONC and makes no model calls. Stable setup pins this CLI version from npm; --channel=main pins a Git commit.`);
   process.exit(0);
 }
 if (operation==='--version') {console.log(pkg.version);process.exit(0);}
@@ -26,8 +26,13 @@ try {
     process.exit(await child.exited);
   }
   if (operation!=='setup') throw new Error('UNKNOWN_COMMAND: use --help');
-  const allowed = new Set(['model','fast','balanced','strong','package']);
+  const allowed = new Set(['model','fast','balanced','strong','package','channel']);
   if (args.slice(1).some(arg=>arg!=='--default' && (!arg.startsWith('--') || !allowed.has(arg.slice(2).split('=')[0]) || !arg.includes('=')))) throw new Error('UNKNOWN_OPTION: use --help');
+  const spec = await setupPackage(pkg.version, value('package'), value('channel'), async () => {
+    const revision=Bun.spawnSync(['git','ls-remote','https://github.com/p-sternik/AOrchestra-opencode.git','refs/heads/main'],{stdout:'pipe',stderr:'pipe'});
+    if(revision.exitCode!==0)throw new Error('CANNOT_PIN_GITHUB_REVISION: provide --package explicitly');
+    return new TextDecoder().decode(revision.stdout).split(/\s/)[0];
+  });
   const version = await command(['--version'],root);
   if (/(\d+\.\d+\.\d+)/.exec(version)?.[1]!=='2.0.26') throw new Error('OpenCode 2.0.26 is required');
   const neutral = await mkdtemp(join(tmpdir(),'aorchestra-setup-'));
@@ -75,13 +80,6 @@ try {
     const tier=(name:string)=>value(name)??(typeof priorOptions?.[name]==='string'&&available.includes(priorOptions[name])?priorOptions[name]:primary!);
     const models:Models={primary,fast:tier('fast'),balanced:tier('balanced'),strong:tier('strong')};
     for(const model of Object.values(models))if(!available.includes(model))throw new Error(`MODEL_NOT_IN_CATALOGUE: ${model}`);
-    let spec=value('package');
-    if(!spec) {
-      const revision=Bun.spawnSync(['git','ls-remote','https://github.com/p-sternik/AOrchestra-opencode.git','refs/heads/main'],{stdout:'pipe',stderr:'pipe'});
-      const sha=new TextDecoder().decode(revision.stdout).split(/\s/)[0];
-      if(revision.exitCode!==0||! /^[a-f0-9]{40}$/.test(sha))throw new Error('CANNOT_PIN_GITHUB_REVISION: provide --package explicitly');
-      spec=`git+https://github.com/p-sternik/AOrchestra-opencode.git#${sha}`;
-    }
     console.log('Installing through OpenCode’s native package manager…');
     // Let the V2 executable perform installation with its own runtime. Its config
     // write goes to a staging directory; we merge the real JSONC ourselves.
@@ -89,13 +87,16 @@ try {
     const installed=await Npm.resolve(spec);
     const installedPkg=JSON.parse(await readFile(join(installed.directory,'package.json'),'utf8'));
     if(installedPkg.name!==pkg.name)throw new Error('UNEXPECTED_PLUGIN_PACKAGE');
+    assertSetupVersion(pkg.version, installedPkg.version, spec);
     const template=JSON.parse(await readFile(join(installed.directory,'opencode.json'),'utf8'));
     for(const id of ['aorchestra','aorchestra-executor']) {
       template.agents[id].system=await readFile(join(installed.directory,'instructions',`${id}.md`),'utf8');
     }
     const after=mergeSetup(before??'{}',template,spec,models,args.includes('--default'),observedTargets);
+    const permissionUpdate=primaryPermissions(config.agents?.aorchestra?.permissions,template.agents.aorchestra.permissions);
     const saved=await saveConfig(configPath,before,after);
-    console.log(JSON.stringify({version:installedPkg.version,package:spec,configPath,changed:saved.changed,backup:saved.backup??null,models},null,2));
+    console.log(JSON.stringify({version:installedPkg.version,package:spec,configPath,changed:saved.changed,backup:saved.backup??null,models,customPermissionsPreserved:permissionUpdate.customized},null,2));
+    if(permissionUpdate.customized)console.log('Custom AOrchestra permissions were preserved; routine-command defaults were not applied. Review agents.aorchestra.permissions to adopt them.');
     const check=Bun.spawn(['bun',join(installed.directory,'scripts/check.ts'),'--global'],{cwd:neutral,env:{...env,OPENCODE_BIN:binary},stdout:'inherit',stderr:'inherit'});
     if(await check.exited!==0)throw new Error('GLOBAL_CHECK_FAILED: config saved; review the diagnostic and backup before retrying');
     console.log(`Ready. In any project: ${binary} run --standalone --agent aorchestra "Your task"\nCatalogue checked; successful provider inference remains untested.`);

@@ -5,8 +5,8 @@ For installation and everyday use, start with the [README](../README.md).
 ## Global installation
 
 Prefer the packaged `aorchestra setup` command in the [README](../README.md).
-It invokes native plugin add, pins the Git source, embeds the installed instructions
-and merges global JSONC. For manual/source installation, discover the directory with
+It invokes native plugin add, pins the stable npm version or explicit main commit,
+embeds the installed instructions and merges global JSONC. For manual/source installation, discover the directory with
 `opencode2 debug paths`, checking
 `OPENCODE_CONFIG_DIR` and the loaded config sources as described in the
 [setup guide](setup-for-agents.md). Merge the template into the existing global
@@ -32,6 +32,17 @@ reviewer or model-powered summarizer.
 - A worker's completion report is separate from acceptance. Acceptance requires
   current observed verifier results, changes within the tracked scope and the
   primary's explicit compatibility review.
+
+The primary allows exact `npm|pnpm|yarn|bun run typecheck|lint|test` commands,
+`bun test` (including arguments), and `git status|diff|log|show|rev-parse` (including
+arguments). Other shell commands ask; existing explicit restrictions still apply.
+Use native `workdir` rather than adding `cd` to a check command. Additional package
+script flags and commands such as Python checks use normal permission evaluation.
+These allowances trust project scripts to execute code, including hooks; they do
+not establish isolation. Native shell parsing evaluates individual resources in
+compound commands. Default-rule migration is exact and ordered, preserving custom
+rules and project overrides. Stable setup pins the invoked CLI version; obtain a
+new stable version by invoking its CLI, or choose `--channel=main` explicitly.
 
 Native child-session permissions default to deny. Workers receive selected tools
 and exact edit paths. Workers do not receive shell; the primary runs verification
@@ -177,7 +188,13 @@ plugin tool domain has no permission-preserving dispatch API; calling a tool's r
 `execute` or a host subprocess would bypass that boundary, so this controller does
 neither. It does not promise unattended end-to-end execution or automatic repairs.
 A failed matching rerun revokes any earlier successful receipt, including on an
-unchanged snapshot. Later edits still invalidate all receipts.
+unchanged snapshot. After acceptance, a failed or unverifiable matching rerun
+blocks the completed task and all transitive dependents, clears their receipts and
+compatibility reviews, and interrupts active dependent children. Baselines, attempt
+history and consumed budgets survive. A later successful rerun alone cannot restore
+acceptance: explicitly restart or enter repair, obtain fresh checks, then accept
+with a new compatibility review. Successful reruns do not refresh accepted receipts.
+Later edits invalidate receipts of unfinished tasks.
 
 Status/context freshness uses the existing whole-tree snapshot provider. This
 adds snapshot work during tracked verification and has not been benchmarked on

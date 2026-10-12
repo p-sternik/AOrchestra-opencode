@@ -25,19 +25,24 @@ Keep the documented per-command Git allowance and ignore-scripts flags for npm 1
 the package needs no install lifecycle scripts. Do not change persistent npm
 settings to make Git installation work.
 
-Use the README's GitHub command or the exact package/revision requested by the
-user. npm registry publication is not yet available. For a non-interactive agent,
-provide `--model=provider/model`, using an observed model identifier from the
-existing configuration/catalogue. Use explicit tier flags only when requested;
+Use the README's stable npm command or the exact package/revision requested by the
+user. Use `--channel=main` only for requested development updates, with the GitHub
+CLI command. Stable setup pins the invoked CLI version; explicit `--package`
+requires a matching CLI version and cannot be combined with `--channel`.
+For a non-interactive agent, provide `--model=provider/model`, using an observed
+model identifier from the existing configuration/catalogue. Use explicit tier flags only when requested;
 otherwise setup retains available tier choices or uses the main model for all tiers.
 Use `--default` only to replace an existing chosen default agent.
 
 The CLI discovers global JSON/JSONC, selects JSONC if present, validates input,
 installs through native plugin add, backs up a changed config and merges only
-AOrchestra entries. It pins the default GitHub source to a commit, embeds the
-installed instructions into agent definitions and runs the no-inference global
-check. The skill's native ID is aorchestra-repo-context; other skill discovery is
+AOrchestra entries. It pins stable npm to the CLI version or main to a commit,
+embeds the installed instructions into agent definitions and runs the no-inference
+global check. The skill's native ID is aorchestra-repo-context; other skill discovery is
 preserved. Existing explicit skill-discovery exclusions remain user settings.
+Known shipped permission defaults migrate to routine-command allowances;
+custom ordered rules remain intact. Report `customPermissionsPreserved` and explain when defaults were
+not applied. The shell allowances trust project scripts and do not isolate them.
 
 Inspect the exit status and output. If both global sources contain conflicting
 AOrchestra registrations, resolve that specific conflict before retrying. If a

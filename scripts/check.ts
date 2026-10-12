@@ -56,12 +56,31 @@ try {
   const active=plugins.data.filter(plugin=>plugin.id==='aorchestra'&&plugin.state.status==='active');
   if(active.length!==1)throw new Error('DUPLICATE_AORCHESTRA_PLUGINS');
   const loaded=active[0];
-  if(globalMode && !globalTargets.includes(loaded.source.type==='package'?loaded.source.target:loaded.source.type==='local'?loaded.source.path:''))throw new Error('GLOBAL_PLUGIN_CONFIG_MISSING');
+  const registered=loaded.source.type==='package'?globalTargets.includes(loaded.source.target)
+    :loaded.source.type==='local'&&(globalTargets.includes(loaded.source.path)||globalTargets.includes(dirname(loaded.source.path)));
+  if(globalMode&&!registered)throw new Error('GLOBAL_PLUGIN_CONFIG_MISSING');
   const bundleRoot=loaded.source.type==='package'?(await Npm.resolve(loaded.source.target)).directory:root;
   const expectedSkill=resolve(bundleRoot,'skills/repo-context/SKILL.md');
   if(!agents.data.some(agent=>agent.id==='aorchestra')) throw new Error('RESOLVED_PRIMARY_MISSING');
   const session=await client.session.create({agent:'aorchestra-executor',location:{directory:project},permissions:[{action:'*',resource:'*',effect:'deny'},{action:'read',resource:'README.md',effect:'allow'}]});
   const persisted=await client.session.get({sessionID:session.id});
+  // Exercise the shipped policy through native evaluation without dispatching tools
+  // or depending on the user's customized global permission rules.
+  const permissionSession=await client.session.create({agent:'aorchestra',location:{directory:project},permissions:source.agents.aorchestra.permissions});
+  const assertPermission=async(sessionID:string,resources:string[],expected:'allow'|'ask'|'deny')=>{
+    const decision=await client.permission.create({sessionID,action:'shell',resources});
+    if(decision.effect==='ask')await client.permission.reply({sessionID,requestID:decision.id,decision:'reject'});
+    if(decision.effect!==expected)throw new Error(`NATIVE_PERMISSION_MISMATCH: ${JSON.stringify(resources)} expected ${expected}, got ${decision.effect}`);
+  };
+  try {
+    for(const manager of ['npm','pnpm','yarn','bun'])for(const script of ['typecheck','lint','test'])await assertPermission(permissionSession.id,[`${manager} run ${script}`],'allow');
+    for(const resource of ['bun test','bun test tests/api.test.ts','git status --short','git diff HEAD','git log -5','git show HEAD','git rev-parse HEAD'])await assertPermission(permissionSession.id,[resource],'allow');
+    await assertPermission(permissionSession.id,['npm publish'],'ask');
+    await assertPermission(permissionSession.id,['npm run test','npm publish'],'ask');
+    await assertPermission(permissionSession.id,['npm run test > output.txt'],'ask');
+    await assertPermission(permissionSession.id,['git push origin main'],'deny');
+    await assertPermission(session.id,['npm run test'],'deny');
+  } finally {await client.session.remove({sessionID:permissionSession.id});}
   let skills=await client.skill.list({location:{directory:project}});
   for(let attempt=0;attempt<10&&!skills.data.some(skill=>skill.id===BUNDLED_SKILL_ID&&skill.path===expectedSkill);attempt++) {
     await new Promise(resolve=>setTimeout(resolve,250)); skills=await client.skill.list({location:{directory:project}});
@@ -86,7 +105,7 @@ try {
   await Bun.write(resolve(scratch,'check.metrics.json'),JSON.stringify({version:1,runs:metrics!.runs},null,2));
   await client.session.remove({sessionID:session.id});
   await client.session.remove({sessionID:bootstrap.id});
-  console.log(JSON.stringify({binary,runtime:version,configMode:globalMode?'global-discovery':'repository-profile',project,pluginApi:pkg.version,pluginLoaded:true,resolvedAgents:true,nativeSessionCreated:!!persisted.id,bundledSkill:true,skillAutoinvoke:false,nativeFailureTelemetry:true,modelCalls:0},null,2));
+  console.log(JSON.stringify({binary,runtime:version,configMode:globalMode?'global-discovery':'repository-profile',project,pluginApi:pkg.version,pluginLoaded:true,resolvedAgents:true,nativeSessionCreated:!!persisted.id,nativePermissionPolicy:true,bundledSkill:true,skillAutoinvoke:false,nativeFailureTelemetry:true,modelCalls:0},null,2));
 } finally {await temporary.close(); if (neutralProject) await removeTemporary(neutralProject,'aorchestra-global-check-');}
 // The native package resolver retains its service scope; this is a one-shot CLI.
 process.exit(0);
