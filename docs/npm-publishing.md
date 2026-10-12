@@ -2,7 +2,10 @@
 
 GitHub Actions validates and packages the release; npm hosts the resulting archive.
 The plugin ships TypeScript for the Bun-based OpenCode host, so a separate JS build
-is not required. CI runs typecheck, behavior tests and a production package install.
+is not required. CI runs typecheck, behavior tests and a production package install
+on Node 22 Windows/Linux and on the publication toolchain (Node 24, npm 12.2.0,
+Linux). Release archive checks accept both older array-shaped npm pack JSON and
+npm 12 package-keyed output.
 
 The publish job lives in **release.yml**, alongside Release Please. A separate
 release-event workflow would not reliably run for releases created by GITHUB_TOKEN.

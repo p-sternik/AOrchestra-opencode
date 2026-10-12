@@ -141,6 +141,15 @@ published during local verification.
 
 ## What these checks establish
 
+The 0.4.0 npm publication run exposed a pack-output compatibility gap: its npm
+12.2.0 toolchain returns package-keyed JSON, while the release test and inline
+archive check assumed an array. The failure was reproduced locally with npm
+12.2.0. After matching the existing package-check parser, all **77 tests (346
+assertions)**, typecheck and production package installation/import/CLI help
+passed on Node 24 with npm 12.2.0. The two release tests also passed with npm
+11.12.1. CI now includes the publication toolchain alongside Node 22 Windows/Linux.
+These checks did not publish a package or modify the immutable 0.4.0 release tag.
+
 Routing/source-handoff changes are covered by tests that reject missing provenance
 before budget/session creation, deliver the handoff and source fingerprint to the
 child, restrict fast analysis to lookup, require a declared fast-to-strong reason
