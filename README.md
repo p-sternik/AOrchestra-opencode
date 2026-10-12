@@ -1,10 +1,9 @@
 # AOrchestra for OpenCode V2
 
 [![Validate](https://github.com/p-sternik/AOrchestra-opencode/actions/workflows/validate.yml/badge.svg)](https://github.com/p-sternik/AOrchestra-opencode/actions/workflows/validate.yml)
+[![npm](https://img.shields.io/npm/v/aorchestra-opencode-v2)](https://www.npmjs.com/package/aorchestra-opencode-v2)
 [![Release](https://img.shields.io/github/v/release/p-sternik/AOrchestra-opencode)](https://github.com/p-sternik/AOrchestra-opencode/releases)
 [![Tested OpenCode](https://img.shields.io/badge/tested_OpenCode-2.0.26-blue)](VALIDATION.md)
-
-**Current release: 0.4.1** <!-- x-release-please-version -->
 
 **An OpenCode harness for working on existing codebases.** One main agent owns the
 task, works directly when it makes sense and delegates bounded work when useful.
@@ -70,6 +69,10 @@ check uses a separate test database.
 Stable setup installs the exact npm version of the CLI you invoked. Running the
 latest published CLI updates to that release; it does not install unreleased main
 changes. Installation disables lifecycle scripts and leaves global npm settings intact.
+The npm badge above shows the latest registry version; the Release badge tracks
+GitHub releases, which can precede npm publication. Check the registry directly with
+`npm view aorchestra-opencode-v2 version` or print the invoked CLI version with
+`npx --ignore-scripts --yes --package=aorchestra-opencode-v2@latest aorchestra --version`.
 
 For development changes, run the CLI from GitHub main and explicitly choose main:
 
@@ -80,8 +83,8 @@ npx --allow-git=all --ignore-scripts --yes --package=git+https://github.com/p-st
 This resolves main to an exact commit. The per-command Git allowance is required
 by [npm 12](https://docs.npmjs.com/cli/v12/using-npm/config/#allow-git); older npm
 versions may warn about it. Channel selection and explicit `--package` are mutually
-exclusive. These channel defaults are available in releases containing this change;
-the original 0.3.0 CLI defaults to GitHub main.
+exclusive. The original 0.3.0 CLI defaults to GitHub main; current releases default
+to stable npm.
 
 The selected source/config/backup paths are printed. Agent instructions come from
 that installed package and are stored in the global config; no checkout paths
