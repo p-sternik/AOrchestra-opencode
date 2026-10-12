@@ -15,6 +15,14 @@ export async function removeTemporary(directory:string,prefix:string) {
   }
 }
 export const binary = process.env.OPENCODE_BIN || 'opencode2';
+export const OPENCODE_RUNTIME_RANGE = '>=2.0.26 <3.0.0';
+export function supportedRuntime(output: string): boolean {
+  const version = /^(?:opencode2?\s+)?v?(\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?)$/.exec(output.trim())?.[1];
+  return version !== undefined && Bun.semver.satisfies(version, OPENCODE_RUNTIME_RANGE);
+}
+export function assertRuntime(output: string): void {
+  if (!supportedRuntime(output)) throw new Error(`OpenCode ${OPENCODE_RUNTIME_RANGE} is required; got ${output.trim()}`);
+}
 export async function command(args: string[], cwd: string, timeoutMs = 120_000, env: NodeJS.ProcessEnv = process.env): Promise<string> {
   return new Promise((resolve, reject) => {
     const child = spawn(binary, args, { cwd, env, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });

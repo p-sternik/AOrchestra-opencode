@@ -3,7 +3,7 @@
 [![Validate](https://github.com/p-sternik/AOrchestra-opencode/actions/workflows/validate.yml/badge.svg)](https://github.com/p-sternik/AOrchestra-opencode/actions/workflows/validate.yml)
 [![npm](https://img.shields.io/npm/v/aorchestra-opencode-v2)](https://www.npmjs.com/package/aorchestra-opencode-v2)
 [![Release](https://img.shields.io/github/v/release/p-sternik/AOrchestra-opencode)](https://github.com/p-sternik/AOrchestra-opencode/releases)
-[![Tested OpenCode](https://img.shields.io/badge/tested_OpenCode-2.0.26-blue)](VALIDATION.md)
+[![Tested OpenCode](https://img.shields.io/badge/tested_OpenCode-2.0.26%20%26%202.0.27-blue)](VALIDATION.md)
 
 **An OpenCode harness for working on existing codebases.** One main agent owns the
 task, works directly when it makes sense and delegates bounded work when useful.
@@ -20,7 +20,8 @@ adapted to native OpenCode V2 sessions, permissions and plugin storage.
 - Resume tracked workflow state with bounded repair cycles after failed checks.
 - Review local execution metrics without an extra model call after every task.
 
-> **Status:** early-stage, tested with OpenCode **2.0.26**. Mechanism tests pass;
+> **Status:** early-stage, native smoke checks pass on OpenCode **2.0.26 and 2.0.27**.
+> The runtime gate accepts stable **>=2.0.26 <3.0.0** releases;
 > representative real-model brownfield effectiveness and cost remain unmeasured.
 > See [validation results](VALIDATION.md). Stable packages are available on npm.
 > Changes on main reach stable users only after a release is published.
@@ -34,7 +35,7 @@ The internal executor requires an active contract owned by the AOrchestra agent.
 
 ### 1. Check the prerequisites
 
-Install **OpenCode V2 2.0.26**, **Bun** (tested with 1.2.15), **Node.js 22+ / npm**
+Install **OpenCode V2 >=2.0.26 <3.0.0**, **Bun** (tested with 1.2.15), **Node.js 22+ / npm**
 and **Git**. Authenticate your intended provider in OpenCode. Python is optional,
 needed only for the repository-context helper and its development tests.
 
@@ -46,6 +47,15 @@ bun --version
 This guide uses `opencode2`. If your V2 executable is named `opencode`, set
 `OPENCODE_BIN=opencode` before running the installer. In PowerShell use
 `$env:OPENCODE_BIN = 'opencode'`; in a Unix shell use `export OPENCODE_BIN=opencode`.
+
+The minimum runtime and pinned API dependencies remain 2.0.26. Native smoke checks
+passed on 2.0.26 and 2.0.27; the version gate also accepts newer stable V2 releases.
+The native check verifies loading and required APIs on your installed runtime.
+Versions below 2.0.26, prereleases and V3 are not accepted. See
+[runtime validation](VALIDATION.md#runtime-version-compatibility) for observed results.
+
+Published CLIs through 0.4.2 still require exactly 2.0.26. The expanded range applies
+to releases containing this change; `@latest` receives it after npm publication.
 
 ### 2. Run setup
 
@@ -73,6 +83,20 @@ The npm badge above shows the latest registry version; the Release badge tracks
 GitHub releases, which can precede npm publication. Check the registry directly with
 `npm view aorchestra-opencode-v2 version` or print the invoked CLI version with
 `npx --ignore-scripts --yes --package=aorchestra-opencode-v2@latest aorchestra --version`.
+
+For package installation through OpenCode, use:
+
+```sh
+opencode2 plugin add aorchestra-opencode-v2@latest
+```
+
+Use `opencode plugin add aorchestra-opencode-v2@latest` if your V2 binary is named
+`opencode`. This registers the plugin; it does not merge the bundled agent
+instructions, permissions or model choices. Run the setup command above to finish
+configuration (it handles an existing registration), or follow the
+[manual setup guide](docs/setup-for-agents.md#manual-fallback).
+For updates, run setup again so agent instructions and options match the installed
+package; `plugin add` alone only updates the plugin registration.
 
 For development changes, run the CLI from GitHub main and explicitly choose main:
 

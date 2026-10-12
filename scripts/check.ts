@@ -1,7 +1,7 @@
 import { resolve, dirname } from 'node:path';
 import { mkdir, mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { command, binary, privateClient, removeTemporary } from './runtime';
+import { command, binary, privateClient, removeTemporary, assertRuntime } from './runtime';
 import { metricsRpc, type Run } from '../lib/telemetry';
 import { Npm } from '@opencode/util/npm';
 import { BUNDLED_SKILL_ID } from '../lib/core';
@@ -13,7 +13,7 @@ const neutralProject = globalMode && !process.env.AORCHESTRA_CHECK_PROJECT
   ? await mkdtemp(resolve(tmpdir(), 'aorchestra-global-check-')) : undefined;
 const project = resolve(process.env.AORCHESTRA_CHECK_PROJECT || neutralProject || root);
 const version = (await command(['--version'], root)).trim();
-if (/(\d+\.\d+\.\d+)/.exec(version)?.[1] !== '2.0.26') throw new Error(`Expected OpenCode 2.0.26; got ${version}`);
+assertRuntime(version);
 const source = await Bun.file(resolve(root, 'opencode.json')).json();
 if (!source.agents?.aorchestra || !source.agents?.['aorchestra-executor']) throw new Error('AGENTS_MISSING');
 if (source.agent || source.agents.aorchestra.tools || source.agents['aorchestra-executor'].tools) throw new Error('LEGACY_CONFIG');

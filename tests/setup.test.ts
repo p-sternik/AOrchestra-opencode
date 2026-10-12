@@ -5,7 +5,17 @@ import { tmpdir } from 'node:os';
 import { mergeSetup, readConfig, saveConfig, isAOrchestraTarget, globalEnvironment, setupPackage, assertSetupVersion, primaryPermissions } from '../lib/setup';
 import shippedTemplate from '../opencode.json';
 import oldPermissions from '../lib/primary-permissions-v0.json';
-import { removeTemporary } from '../scripts/runtime';
+import { removeTemporary, supportedRuntime, assertRuntime } from '../scripts/runtime';
+test('runtime compatibility accepts newer stable V2 releases and rejects unsupported versions',()=>{
+  for(const version of ['2.0.26','2.0.27','2.1.0','2.99.99','v2.0.26','opencode 2.1.0\n','opencode2 2.1.0','2.0.26+build.1']) {
+    expect(supportedRuntime(version)).toBe(true);
+    expect(()=>assertRuntime(version)).not.toThrow();
+  }
+  for(const version of ['1.9.99','2.0.0','2.0.25','3.0.0','2.0.26-beta.1','2.1.0-next.1','0.0.0-next-17444','','unknown','2.0','12.0.26','2.0.26 trailing']) {
+    expect(supportedRuntime(version)).toBe(false);
+    expect(()=>assertRuntime(version)).toThrow('OpenCode >=2.0.26 <3.0.0 is required');
+  }
+});
 const template={plugins:[{package:'./plugins/aorchestra',options:{maxAttempts:2,models:{}}}],agents:{aorchestra:{system:'Main instructions',permissions:[{action:'shell',effect:'ask'}]},'aorchestra-executor':{system:'Worker instructions'}}};
 const models={primary:'p/main',fast:'p/fast',balanced:'p/main',strong:'p/strong'};
 test('stable setup pins the CLI version without Git; main pins a validated commit',async()=>{

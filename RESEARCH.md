@@ -69,6 +69,13 @@ Native session.create permissions are used instead of newer interfaces absent
 from the pinned package. Source/types and local integration checks take precedence
 over documentation for a later version.
 
+Runtime admission now accepts stable `>=2.0.26 <3.0.0` rather than requiring an
+exact match with the pinned API packages. Keeping 2.0.26 as the minimum preserves
+the observed baseline; excluding V3 avoids assuming compatibility across a major
+API change. Native smoke checks passed on 2.0.26 and 2.0.27. Acceptance of another
+V2 release by the version gate still requires native integration validation;
+see [observed results and limits](VALIDATION.md#runtime-version-compatibility).
+
 ## Release automation
 
 Release Please generates version/changelog PRs from Conventional Commits and
