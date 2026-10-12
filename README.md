@@ -17,7 +17,8 @@ adapted to native OpenCode V2 sessions, permissions and plugin storage.
 
 - Reuse existing implementations and tests before adding abstractions or rewrites.
 - Delegate selectively with relevant context and a clear change scope.
-- Require current verification evidence before accepting tracked changes.
+- Select project checks for affected files and require fresh native evidence.
+- Resume tracked workflow state with bounded repair cycles after failed checks.
 - Review local execution metrics without an extra model call after every task.
 
 > **Status:** early-stage, tested with OpenCode **2.0.26**. Mechanism tests pass;
@@ -155,7 +156,10 @@ It also requires a bounded source handoff separating facts, candidates, unknowns
 and checks. Fast research is limited to declared fact lookup; synthesis uses
 balanced/strong. A reasoned fast-to-strong retry is available within the existing
 two-attempt budget. See the [routing contract](docs/reference.md#task-contracts-and-verification).
-Worker completion is separate from tracked-task acceptance. Workers have scoped
+Tracked tasks persist discovery, planning, execution, verification and bounded repair
+phases. Verification selects configured path checks or existing package scripts,
+then the primary runs them through native tools and permissions. Worker completion
+is separate from tracked-task acceptance. Workers have scoped
 tools/edit paths; the main agent runs tests. Permissions are not an OS sandbox.
 Failed changes are not automatically rolled back. Large repositories need care
 around snapshot limits and excluded paths; see the [technical reference](docs/reference.md).

@@ -25,7 +25,8 @@ native child session. There is no additional agent runtime or mandatory planner,
 reviewer or model-powered summarizer.
 
 - `aorchestra_task` registers tasks, dependencies, exact write paths, compatibility
-  constraints and verifiers; starts, accepts, invalidates or recovers work.
+  constraints and verifiers; plans, starts, verifies, repairs, accepts, resumes,
+  invalidates or recovers work.
 - `aorchestra_delegate` executes a registered contract with an explicit model tier,
   routing reason and, on retry, a description of what changed.
 - A worker's completion report is separate from acceptance. Acceptance requires
@@ -92,6 +93,96 @@ an observed numeric `metadata.exitCode`, `metadata.exit` or `output.exitCode`;
 missing codes remain unverified. `contains` supports bounded read/grep evidence.
 Acceptance also requires `compatibilityReview`, which is reasoning by the primary,
 not a formal semantic proof. Failed work is not automatically rolled back.
+
+## Workflow and project-aware verification
+
+Task metadata uses the existing v1 ledger with optional `workflow` and
+`verification` fields. Older tasks acquire phases without losing their baseline,
+attempt history, receipts or delegation budget. Registration starts at `discover`
+and records a transition to `plan`; start/delegation enters `execute`. Native
+verification outcomes or `task verify` enter `verify`. Only acceptance, with fresh
+predicates, write-scope validation and compatibility review, enters `complete`.
+Failures/interruption can enter `blocked`. These phases describe control state,
+not a model-generated architecture plan or proof of discovery completeness.
+
+| Operation | Behavior |
+| --- | --- |
+| `plan` | Refresh project checks before starting; no commands run |
+| `verify` | Select checks for baseline-to-current affected paths, enter verification |
+| `repair` | Require an evidence-based `reason`, clear receipts, consume one repair cycle |
+| `resume` | Read current phase, budgets, `pendingVerifiers`, observations and plan freshness |
+
+Registration selects checks from declared write paths; delegation refreshes them
+from actual affected paths on return. DIRECT work calls `verify` after edits.
+Acceptance reselects against current files so omitting `verify` cannot bypass
+required discovered checks. `resume` is read-only: it never spends a delegation,
+launches a child, reruns a command or duplicates phase events. `recover` remains
+an explicit action that interrupts stale children and preserves their files.
+Invalidation resets plan/baseline and dependent tasks, retaining repair counters.
+
+Set `maxRepairs` in plugin options (positive integer, default **2**). When another
+repair would exceed it, the task returns `blocked`; start, invalidation and plugin
+restart do not reset that budget. This is independent of `maxAttempts` (**2** by
+default) and `maxDelegations`. Enter repair before editing a task in verification
+or retrying its child. A retry still requires `delta`, tier evidence and existing
+escalation/budget checks. Successful runtime execution alone does not consume a
+repair or accept the task.
+
+Project checks are selected deterministically:
+
+1. For each affected path, use all matching `options.verification` rules. Paths
+   are exact filenames or directory prefixes; `.` matches the project. No globs.
+2. For uncovered paths, locate the nearest ancestor `package.json` inside the
+   project and select existing nonempty `typecheck`, `lint`, `test` scripts.
+   Use its supported `packageManager`, otherwise walk ancestors for a workspace
+   declaration or nearest unambiguous lockfile.
+   With no declaration/lockfile, use npm. Unknown/conflicting managers are gaps.
+3. Run the script in that package using native shell's `workdir` for nested
+   packages. Do not guess framework flags, test filenames, dependency graphs,
+   watch-mode overrides or build requirements. Root-wide/cross-package checks
+   and other languages belong in explicit rules or task predicates.
+
+Example plugin options (merge into the existing plugin registration):
+
+```json
+{
+  "maxRepairs": 2,
+  "verification": [
+    {
+      "paths": ["services/api"],
+      "verifiers": [
+        {
+          "id": "api-regression",
+          "tool": "shell",
+          "input": { "command": "python -m unittest discover -s services/api/tests" },
+          "expect": { "exitCode": 0 }
+        }
+      ]
+    }
+  ]
+}
+```
+
+Explicit task predicates remain required and are never replaced. Identical
+predicates are deduplicated and generated IDs remain stable across plan refresh.
+Missing discovery is reported in `gaps`; a task's explicit predicates can supply
+checks when the project has no supported convention. Gaps are not successful
+checks or assurance of broad coverage. Malformed manifests and escaped symlinks
+fail closed rather than silently skipping verification.
+
+The controller injects pending tool/input pairs into the primary's native context
+and records native outcomes as `{event, snapshot, passed}`. Commands still need the
+primary's native tool call and normal permission evaluation. OpenCode 2.0.26's
+plugin tool domain has no permission-preserving dispatch API; calling a tool's raw
+`execute` or a host subprocess would bypass that boundary, so this controller does
+neither. It does not promise unattended end-to-end execution or automatic repairs.
+A failed matching rerun revokes any earlier successful receipt, including on an
+unchanged snapshot. Later edits still invalidate all receipts.
+
+Status/context freshness uses the existing whole-tree snapshot provider. This
+adds snapshot work during tracked verification and has not been benchmarked on
+large repositories; incremental snapshots remain a separate change. Untracked
+DIRECT work retains native behavior and has no new semantic acceptance claim.
 
 ## Repository context
 
@@ -187,7 +278,7 @@ evidence. See [VALIDATION.md](../VALIDATION.md) before interpreting results.
 ## Limits
 
 - Default budgets: eight delegations per primary session, two attempts per task,
-  ten minutes per delegation and 300k reported tokens per native session. These
+  two repair cycles per task, ten minutes per delegation and 300k reported tokens per native session. These
   are safeguards, not measured optimal thresholds or a hard whole-ticket dollar cap.
 - Source snapshots include untracked files, do not traverse symlinks and exclude
   secrets, `.git`, `.opencode`, `node_modules`, `.cache`, plus root `coverage`,
