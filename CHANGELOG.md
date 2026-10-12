@@ -3,6 +3,13 @@
 Release Please maintains future entries from Conventional Commits. Earlier local
 iterations are described below for context; they are not historical Git tags.
 
+## [0.4.1](https://github.com/p-sternik/AOrchestra-opencode/compare/0.4.0...0.4.1) (2026-10-12)
+
+
+### Bug Fixes
+
+* support npm 12 release archive metadata ([#6](https://github.com/p-sternik/AOrchestra-opencode/issues/6)) ([8ceb217](https://github.com/p-sternik/AOrchestra-opencode/commit/8ceb217acded5c887951edc63749dd0fac95d408))
+
 ## [0.4.0](https://github.com/p-sternik/AOrchestra-opencode/compare/0.3.0...0.4.0) (2026-10-12)
 
 

@@ -4,7 +4,7 @@
 [![Release](https://img.shields.io/github/v/release/p-sternik/AOrchestra-opencode)](https://github.com/p-sternik/AOrchestra-opencode/releases)
 [![Tested OpenCode](https://img.shields.io/badge/tested_OpenCode-2.0.26-blue)](VALIDATION.md)
 
-**Current release: 0.4.0** <!-- x-release-please-version -->
+**Current release: 0.4.1** <!-- x-release-please-version -->
 
 **An OpenCode harness for working on existing codebases.** One main agent owns the
 task, works directly when it makes sense and delegates bounded work when useful.
