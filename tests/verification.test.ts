@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { mkdtemp, mkdir, writeFile, rm, symlink } from 'node:fs/promises';
+import { mkdtemp, mkdir, writeFile, rm, symlink, realpath } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import type { Task } from '../lib/core';
@@ -7,7 +7,8 @@ import { taskVerifiers, validateVerificationRules, verificationPlan } from '../l
 
 const task = (): Task => ({id:'fix',kind:'change',instruction:'Preserve consumers',context:'',dependsOn:[],writePaths:['src/api.ts'],preserve:[],verifiers:[{id:'regression',tool:'shell',input:{command:'node regression.js'},expect:{exitCode:0}}],status:'running',attempts:[],receipts:{}});
 async function fixture(files: Record<string,string>) {
-  const root=await mkdtemp(join(tmpdir(),'aorchestra-verification-'));
+  // Windows CI may expose tmpdir through an 8.3 alias; discovery returns canonical paths.
+  const root=await realpath(await mkdtemp(join(tmpdir(),'aorchestra-verification-')));
   for(const [path,text] of Object.entries(files)) {await mkdir(join(root,path,'..'),{recursive:true});await writeFile(join(root,path),text);}
   return {root,clean:()=>rm(root,{recursive:true,force:true})};
 }
