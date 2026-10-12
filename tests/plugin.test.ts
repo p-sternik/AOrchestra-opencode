@@ -22,7 +22,7 @@ async function fixture(options: Record<string,unknown> = {}) {
   const events:any[]=[];
   let wake:(()=>void)|undefined;
   const ctx = {
-    location: { directory: root }, options,
+    location: { directory: root }, options:{updateCheck:false,...options},
     storage: { get: async (key: string) => data.get(key), set: async (key: string, value: unknown) => { data.set(key, structuredClone(value)); }, scan: async ({prefix,after,limit=100}:any) => { const keys=[...data.keys()].filter(k=>k.startsWith(prefix)&&(!after||k>after)).sort(); const selected=keys.slice(0,limit);return {entries:selected.map(key=>({key,value:data.get(key)})),next:keys.length>limit?selected.at(-1):undefined}; } },
     rpc: { register: async (definition:any,handlers:any) => {rpc.set(definition.id,handlers);} },
     event: {subscribe: async function*({signal}:any) {while(!signal.aborted){if(!events.length)await new Promise<void>(resolve=>{wake=resolve;signal.addEventListener('abort',resolve,{once:true});});if(signal.aborted)return;const event=events.shift();if(event)yield event;} }},

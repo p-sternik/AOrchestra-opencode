@@ -49,12 +49,19 @@ export function isAOrchestraTarget(target: string): boolean {
     || /^(?:github:|git\+https:\/\/github\.com\/|https:\/\/github\.com\/)p-sternik\/AOrchestra-opencode(?:\.git)?(?:#|$)/i.test(target)
     || /(?:^|[\\/])plugins[\\/]aorchestra[\\/]?$/.test(target);
 }
-export function mergeSetup(text: string, template: RecordValue, spec: string, models: Models, makeDefault = false, observedTargets: string[] = []): string {
+export function mergeSetup(text: string, template: RecordValue, spec: string, models: Models, makeDefault = false, observedTargets: string[] = [], managedUpdate?: boolean): string {
   const existing = readConfig(text);
   const matches = (target:string)=>target===spec || observedTargets.includes(target) || isAOrchestraTarget(target);
   const oldPlugin = existing.plugins?.find((entry: any)=>typeof entry==='object' && entry && matches(entry.package ?? ''));
   const options = {...template.plugins.find((entry:any)=>typeof entry==='object').options, ...oldPlugin?.options,
     models:{fast:models.fast,balanced:models.balanced,strong:models.strong}};
+  if (managedUpdate !== undefined) {
+    delete options.updateManagedPackage;
+    if (managedUpdate) {
+      options.updateManagedPackage=spec;
+      options.autoUpdate ??= true;
+    }
+  }
   const plugin = {package:spec, options};
   let inserted = false;
   const plugins = (existing.plugins ?? []).flatMap((entry:any)=>{
@@ -80,6 +87,16 @@ export function mergeSetup(text: string, template: RecordValue, spec: string, mo
   }
   if (makeDefault || existing.default_agent === undefined) set(['default_agent'],'aorchestra');
   return text;
+}
+// Setup pins packages for reproducibility; only its matching marker permits
+// automatic replacement. Editing the package spec makes it a manual pin.
+export function assertManagedUpdate(config: RecordValue, expected: string): void {
+  const entries=(config.plugins??[]).filter((entry:any)=>isAOrchestraTarget(typeof entry==='string'?entry:entry?.package??''));
+  const entry=entries[0];
+  if (entries.length!==1 || entry?.package!==expected || entry.options?.updateManagedPackage!==expected || entry.options?.autoUpdate===false || entry.options?.updateCheck===false)
+    throw new Error('AUTO_UPDATE_CONFIG_CHANGED: update skipped; rerun setup manually');
+  if (![config.agents?.aorchestra?.model,...['fast','balanced','strong'].map(tier=>entry.options?.models?.[tier])].every(model=>typeof model==='string' && model.length>0))
+    throw new Error('AUTO_UPDATE_MODELS_REQUIRED: rerun setup manually');
 }
 export async function saveConfig(path: string, before: string | undefined, after: string): Promise<{changed:boolean;backup?:string}> {
   if (before === after) return {changed:false};

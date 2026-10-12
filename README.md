@@ -95,8 +95,8 @@ Use `opencode plugin add aorchestra-opencode-v2@latest` if your V2 binary is nam
 instructions, permissions or model choices. Run the setup command above to finish
 configuration (it handles an existing registration), or follow the
 [manual setup guide](docs/setup-for-agents.md#manual-fallback).
-For updates, run setup again so agent instructions and options match the installed
-package; `plugin add` alone only updates the plugin registration.
+For manual updates, run setup again so agent instructions and options match the
+installed package; `plugin add` alone only updates the plugin registration.
 
 For development changes, run the CLI from GitHub main and explicitly choose main:
 
@@ -159,6 +159,33 @@ available, and avoids rewriting an unchanged config. For a specific published np
 version or Git revision, use `setup --package=<npm-or-git-spec>` with the matching
 CLI version; a version mismatch fails before saving global config. The package
 name is `aorchestra-opencode-v2`. A main-channel update uses the GitHub command above.
+
+Stable setup enables automatic updates in releases containing this feature.
+Existing installations need setup once from such a release to enable it. On
+startup, the installed plugin checks npm in the background, with a 24-hour
+interval recorded in native plugin storage. New stable releases within the same
+major version run their packaged setup, including the global no-inference check.
+Setup preserves selected models, unrelated configuration and custom permissions,
+and backs up changed configuration. Restart OpenCode after the update notification.
+
+The session sidebar footer shows the running AOrchestra version. A second line
+shows a newer available version, or an installed update requiring restart. The
+version comes from the active server plugin; it changes when that plugin reloads.
+
+Merge these options into the existing AOrchestra plugin registration:
+
+```json
+{"autoUpdate": false, "updateCheck": true}
+```
+
+`autoUpdate: false` keeps notifications without installation; `updateCheck: false`
+disables both. Explicit `setup --package=...`, Git/main and source installations
+do not auto-update. Changing the registered package version also creates a manual
+pin: the installer-written `updateManagedPackage` must match the package spec for
+automatic installation. Leave this marker to setup. Major upgrades require manual
+setup. Checks with explicit `OPENCODE_CONFIG`/`OPENCODE_CONFIG_CONTENT` overrides
+skip updates; `AORCHESTRA_DISABLE_UPDATE=1` temporarily disables the updater.
+See [update behavior and failure handling](docs/reference.md#automatic-updates).
 
 Known earlier default permissions are migrated automatically. Customized ordered
 rules are preserved, and setup reports `customPermissionsPreserved: true` when

@@ -24,6 +24,67 @@ or a package spec and embedded instruction text for a packaged installation.
 Normal use requires no project config or OPENCODE_CONFIG override. Project-local
 config can still override global settings.
 
+## Automatic updates
+
+Stable setup writes `options.updateManagedPackage` equal to its exact npm package
+spec and defaults `autoUpdate` to true, preserving an existing false value. An
+explicit `--package` or `--channel=main` removes the marker. Earlier installations
+remain pinned until setup from a release containing this feature is run. Editing
+the package without changing the marker creates a manual pin. `autoUpdate: false`
+means notification only; `updateCheck: false` disables checks. Both options must
+be booleans. Local/project options can disable automatic installation as well.
+
+Startup schedules work after plugin registration; it does not wait for the network
+or call a model. Global JSON/JSONC discovery uses the native global paths and
+`OPENCODE_CONFIG_DIR`. Multiple AOrchestra registrations, Git/local sources,
+prerelease versions, explicit config/content overrides and mismatched active native
+package metadata skip checks. This prevents a checkout from updating a global
+installation. `AORCHESTRA_DISABLE_UPDATE=1` also skips checks, and setup/check
+subprocesses set it to prevent recursive installation.
+
+The updater records check attempts in native plugin storage before requesting
+npm's latest stable metadata, including offline/failed attempts. The interval is
+24 hours per native storage scope; native cross-process file locking serializes
+automatic checks/installations for the same global config directory. A lock timeout
+skips that attempt. The registry request times out after ten seconds. Greater
+stable versions in the same major are eligible; major upgrades only notify.
+
+An isolated Bun worker uses native `Npm.add`/`resolve` with an exact spec, checks package
+identity/version, and runs that package's CLI with `setup --update-from=<old-spec>`.
+This internal flag requires a matching managed registration, complete configured
+models and a greater version in the same major. The CLI re-reads global config,
+retains all chosen models (unavailable models fail rather than falling back),
+merges instructions/options through normal setup, backs up changes and performs
+the global zero-inference check. Existing concurrent-config protection still
+applies. The worker and its children have a 15-minute timeout and use `OPENCODE_BIN` or the hosting
+OpenCode executable when recognizable; Bun remains required.
+
+Notifications are written to the server log and added to the next AOrchestra
+primary context, and version/update status appears in the TUI sidebar footer.
+They do not reload a running plugin/session: restart OpenCode
+after success. Network/install/check failures leave execution available and do
+not trigger an immediate retry. A failed post-install check can leave the backed-up
+configuration change visible, as in manual setup; inspect the backup and rerun
+setup manually. There is no automatic rollback. This feature has no provider
+inference or semantic-effectiveness claim.
+
+The package exposes a native `./tui` entrypoint; local directory discovery uses
+`plugins/aorchestra/tui.ts`. Its additive `sidebar.footer` contribution shows
+`AOrchestra v<loaded-version>` and, when applicable, `v<version> available` or
+`v<version> installed · restart required`. It reads the location-scoped
+`aorchestra.status.get` RPC from the active server plugin, rather than assuming
+the TUI bundle and server have the same version. The read-only RPC returns
+`version`, nullable `availableVersion` and nullable `installedVersion`.
+
+The sidebar refreshes every ten seconds while mounted, cancels requests when its
+session/location changes or it is disposed, and ignores late responses. An
+unavailable RPC shows `Status unavailable` without substituting a local version.
+Update state is persisted as structured metadata alongside the existing check
+timestamp/message. An update is marked installed only after setup and its check
+succeed; a newly loaded version ignores status from the previous package spec.
+The sidebar makes no registry requests or model calls. Development render tests
+use Solid's browser condition and OpenTUI's native JSX preload through `bun run test`.
+
 ## How it works
 
 The primary performs cohesive investigation/edit/test work directly. It delegates

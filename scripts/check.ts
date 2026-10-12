@@ -5,6 +5,8 @@ import { command, binary, privateClient, removeTemporary, assertRuntime } from '
 import { metricsRpc, type Run } from '../lib/telemetry';
 import { Npm } from '@opencode/util/npm';
 import { BUNDLED_SKILL_ID } from '../lib/core';
+import { versionRpc, type VersionStatus } from '../lib/version-status';
+import packageInfo from '../package.json';
 const root = resolve(import.meta.dir, '..');
 const globalMode = process.argv.includes('--global');
 const scratch = resolve(root, 'work/runtime');
@@ -20,7 +22,7 @@ if (source.agent || source.agents.aorchestra.tools || source.agents['aorchestra-
 const pkg = await Bun.file(resolve(dirname(Bun.resolveSync('@opencode/plugin',root)), '../../package.json')).json();
 if (pkg.version !== '2.0.26') throw new Error('PLUGIN_VERSION_MISMATCH');
 await mkdir(scratch, {recursive:true});
-const checkEnv: NodeJS.ProcessEnv = {...process.env, OPENCODE_DB:resolve(scratch, globalMode ? 'global-check.db' : 'check.db')};
+const checkEnv: NodeJS.ProcessEnv = {...process.env, AORCHESTRA_DISABLE_UPDATE:'1', OPENCODE_DB:resolve(scratch, globalMode ? 'global-check.db' : 'check.db')};
 if (globalMode) {
   delete checkEnv.OPENCODE_CONFIG;
   delete checkEnv.OPENCODE_CONFIG_CONTENT;
@@ -60,6 +62,9 @@ try {
     :loaded.source.type==='local'&&(globalTargets.includes(loaded.source.path)||globalTargets.includes(dirname(loaded.source.path)));
   if(globalMode&&!registered)throw new Error('GLOBAL_PLUGIN_CONFIG_MISSING');
   const bundleRoot=loaded.source.type==='package'?(await Npm.resolve(loaded.source.target)).directory:root;
+  const loadedVersion=loaded.source.type==='package'?loaded.source.version:packageInfo.version;
+  const status=await client.rpc(versionRpc).get({},{location:{directory:project}}) as VersionStatus;
+  if(status.version!==loadedVersion || status.availableVersion!==null || status.installedVersion!==null)throw new Error('NATIVE_VERSION_STATUS_MISMATCH');
   const expectedSkill=resolve(bundleRoot,'skills/repo-context/SKILL.md');
   if(!agents.data.some(agent=>agent.id==='aorchestra')) throw new Error('RESOLVED_PRIMARY_MISSING');
   const session=await client.session.create({agent:'aorchestra-executor',location:{directory:project},permissions:[{action:'*',resource:'*',effect:'deny'},{action:'read',resource:'README.md',effect:'allow'}]});
@@ -105,7 +110,7 @@ try {
   await Bun.write(resolve(scratch,'check.metrics.json'),JSON.stringify({version:1,runs:metrics!.runs},null,2));
   await client.session.remove({sessionID:session.id});
   await client.session.remove({sessionID:bootstrap.id});
-  console.log(JSON.stringify({binary,runtime:version,configMode:globalMode?'global-discovery':'repository-profile',project,pluginApi:pkg.version,pluginLoaded:true,resolvedAgents:true,nativeSessionCreated:!!persisted.id,nativePermissionPolicy:true,bundledSkill:true,skillAutoinvoke:false,nativeFailureTelemetry:true,modelCalls:0},null,2));
+  console.log(JSON.stringify({binary,runtime:version,configMode:globalMode?'global-discovery':'repository-profile',project,pluginApi:pkg.version,pluginLoaded:true,loadedVersion:status.version,resolvedAgents:true,nativeSessionCreated:!!persisted.id,nativePermissionPolicy:true,bundledSkill:true,skillAutoinvoke:false,nativeFailureTelemetry:true,modelCalls:0},null,2));
 } finally {await temporary.close(); if (neutralProject) await removeTemporary(neutralProject,'aorchestra-global-check-');}
 // The native package resolver retains its service scope; this is a one-shot CLI.
 process.exit(0);

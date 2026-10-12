@@ -55,6 +55,12 @@ Known shipped permission defaults migrate to routine-command allowances;
 custom ordered rules remain intact. Report `customPermissionsPreserved` and explain when defaults were
 not applied. The shell allowances trust project scripts and do not isolate them.
 
+Releases containing automatic updates mark stable setup registrations as managed
+and default `autoUpdate` to true, preserving an existing false value. Explicit
+`--package` and main-channel setup remove management. Do not edit the
+`updateManagedPackage` marker manually. See [automatic updates](reference.md#automatic-updates)
+for disabling installation/checks, manual pins and failure handling.
+
 Inspect the exit status and output. If both global sources contain conflicting
 AOrchestra registrations, resolve that specific conflict before retrying. If a
 config changes concurrently, re-read it rather than overwriting it. A failed

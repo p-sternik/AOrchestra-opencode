@@ -2,7 +2,8 @@
   "compilerOptions": {
     "target": "ES2022", "module": "ESNext", "moduleResolution": "Bundler",
     "strict": true, "noEmit": true, "skipLibCheck": true,
-    "types": ["bun"], "allowImportingTsExtensions": true, "resolveJsonModule": true
+    "types": ["bun"], "allowImportingTsExtensions": true, "resolveJsonModule": true,
+    "jsx": "preserve", "jsxImportSource": "@opentui/solid"
   },
-  "include": ["plugins/**/*.ts", "lib/**/*.ts", "scripts/**/*.ts", "tests/**/*.ts"]
+  "include": ["plugins/**/*.ts", "plugins/**/*.tsx", "lib/**/*.ts", "scripts/**/*.ts", "tests/**/*.ts"]
 }
