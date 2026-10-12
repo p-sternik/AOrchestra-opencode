@@ -3,6 +3,13 @@
 Release Please maintains future entries from Conventional Commits. Earlier local
 iterations are described below for context; they are not historical Git tags.
 
+## [0.5.0](https://github.com/p-sternik/AOrchestra-opencode/compare/0.4.3...0.5.0) (2026-10-12)
+
+
+### Features
+
+* add managed updates and sidebar version status ([#12](https://github.com/p-sternik/AOrchestra-opencode/issues/12)) ([60ff665](https://github.com/p-sternik/AOrchestra-opencode/commit/60ff665f224d7076fdeb6e0d6e0f8f5ec413c9d7))
+
 ## [0.4.3](https://github.com/p-sternik/AOrchestra-opencode/compare/0.4.2...0.4.3) (2026-10-12)
 
 
