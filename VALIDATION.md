@@ -122,6 +122,23 @@ Further brownfield priorities remain separate from this change:
 - Effectiveness: compare matched historical tasks with independent regression and
   scope checks, counting blocked/failed runs and full workflow cost.
 
+## Automatic release PR merging
+
+Local Linux checks on 2026-10-12: typecheck, **77 harness/setup/release tests
+(344 assertions)**, **13 repo-context helper tests**, evaluation corpus validation,
+version consistency, workflow YAML parsing and diff checks passed. The release
+automation test executes the actual workflow shell commands with a recording
+GitHub CLI fixture, covering successful merge/dispatch, identity rejection, merge
+failure, a changed-head API rejection, invalid SHA and dispatch failure. Existing
+registry-integrity scenarios still pass. Localhost tests required running outside
+the filesystem/network sandbox.
+
+The fixture verifies command sequencing and submission of the validated SHA; it
+does not execute GitHub's jq evaluator or prove live token permissions, branch
+protection, Windows CI or npm OIDC publication. Those remain checks for the actual
+Actions run after this configuration is merged. No release or package was
+published during local verification.
+
 ## What these checks establish
 
 Routing/source-handoff changes are covered by tests that reject missing provenance

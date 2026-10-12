@@ -222,6 +222,7 @@ for observed checks and remaining gaps.
 Maintained by [Piotr Sternik](https://github.com/p-sternik). For bugs or questions,
 [open an issue](https://github.com/p-sternik/AOrchestra-opencode/issues) with the
 installed package spec/version, OpenCode version, OS and a minimal reproduction.
-Release Please prepares version/changelog PRs; merging one publishes a Git tag
-and GitHub Release. npm publication runs in the same workflow after the owner
+Release Please prepares version/changelog PRs and automatically merges them after
+Windows/Linux validation, then publishes a Git tag and GitHub Release. npm
+publication runs in the release workflow after the owner
 configures Trusted Publishing and enables its repository variable.

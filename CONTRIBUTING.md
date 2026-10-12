@@ -27,14 +27,21 @@ a patch release PR. Ordinary Git history records every commit regardless.
 
 1. Merge changes into `main`. The Release workflow validates main on Windows and
    Linux, then creates or updates a Release Please PR.
-2. Review the generated version, CHANGELOG.md, package.json, package-lock.json and
-   `.release-please-manifest.json`. The same workflow explicitly validates the
-   generated release branch; GITHUB_TOKEN-created PRs do not trigger normal PR CI.
-3. Merge the release PR after checks pass. The next main workflow creates a plain
-   numeric tag (for example `0.2.3`) and a GitHub Release.
+2. The workflow validates the generated release PR's immutable head SHA on Windows
+   and Linux, then automatically squash-merges that exact revision. Failed checks
+   or a changed revision prevent the merge. Only the same-repository Release Please
+   PR targeting main, authored by github-actions[bot] and labeled
+   `autorelease: pending`, is eligible. Ordinary PRs still require normal review.
+3. After merging, the workflow explicitly dispatches Release on main, validates
+   main again and creates a plain numeric tag (for example `0.2.3`) and a GitHub
+   Release. GITHUB_TOKEN merges do not trigger push workflows, so this dispatch
+   is required. npm publication follows when configured.
 
 No additional token secret is required. The repository must allow GitHub Actions
-to create pull requests. Workflow permissions are scoped to the release job.
+to create pull requests and allow squash merges. Existing branch protection and
+review requirements remain enforced by GitHub; requirements for a human review
+can prevent automatic release PR merging. Write permissions are scoped to the
+release and merge jobs; only the merge job receives actions: write for dispatch.
 Run Release through Actions' **Run workflow** when you need to retry after fixing
 an infrastructure failure. Do not edit an existing released tag or manually bump
 the version during normal development. Telemetry imports package.json so there

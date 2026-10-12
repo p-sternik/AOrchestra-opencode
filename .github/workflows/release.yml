@@ -22,6 +22,7 @@ jobs:
     uses: ./.github/workflows/validate.yml
   release:
     needs: validate-main
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
     permissions:
       contents: write
@@ -29,6 +30,7 @@ jobs:
       pull-requests: write
     outputs:
       pr-number: ${{ steps.release.outputs.pr && fromJSON(steps.release.outputs.pr).number }}
+      pr-head-sha: ${{ steps.snapshot.outputs.sha }}
       release_created: ${{ steps.release.outputs.release_created }}
       tag_name: ${{ steps.release.outputs.tag_name }}
     steps:
@@ -37,12 +39,53 @@ jobs:
         with:
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
+      - name: Capture release PR revision
+        if: steps.release.outputs.pr != ''
+        id: snapshot
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ steps.release.outputs.pr && fromJSON(steps.release.outputs.pr).number }}
+        run: |
+          sha=$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER" --jq '.head.sha')
+          [[ "$sha" =~ ^[0-9a-f]{40}$ ]] || exit 1
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
   validate-release-pr:
     needs: release
     if: ${{ needs.release.outputs.pr-number != '' }}
     uses: ./.github/workflows/validate.yml
     with:
-      ref: refs/pull/${{ needs.release.outputs.pr-number }}/head
+      ref: ${{ needs.release.outputs.pr-head-sha }}
+
+  merge-release-pr:
+    needs: [release, validate-release-pr]
+    if: ${{ needs.release.outputs.pr-number != '' && inputs.publish_tag == '' }}
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+      pull-requests: write
+      actions: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      PR_NUMBER: ${{ needs.release.outputs.pr-number }}
+      PR_HEAD_SHA: ${{ needs.release.outputs.pr-head-sha }}
+    steps:
+      - name: Merge validated release PR and continue release
+        run: |
+          [[ "$PR_NUMBER" =~ ^[0-9]+$ && "$PR_HEAD_SHA" =~ ^[0-9a-f]{40}$ ]] || exit 1
+          gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER" --jq '
+            if .state == "open" and .draft == false
+              and .base.ref == "main"
+              and .base.repo.full_name == env.GITHUB_REPOSITORY
+              and .head.repo.full_name == env.GITHUB_REPOSITORY
+              and .head.sha == env.PR_HEAD_SHA
+              and .user.login == "github-actions[bot]"
+              and any(.labels[]; .name == "autorelease: pending")
+            then .number else error("Release PR identity or validated revision changed") end'
+          gh api --method PUT "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER/merge" \
+            -f sha="$PR_HEAD_SHA" -f merge_method=squash \
+            --jq 'if .merged then .sha else error(.message) end'
+          # GITHUB_TOKEN merges do not trigger push workflows; dispatch explicitly.
+          gh workflow run release.yml --repo "$GITHUB_REPOSITORY" --ref main
 
   publish-npm:
     needs: release
