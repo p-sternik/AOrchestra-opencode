@@ -3,6 +3,24 @@
 Release Please maintains future entries from Conventional Commits. Earlier local
 iterations are described below for context; they are not historical Git tags.
 
+## [0.4.0](https://github.com/p-sternik/AOrchestra-opencode/compare/0.3.0...0.4.0) (2026-10-12)
+
+
+### Features
+
+* add durable workflow and native verification controller ([#3](https://github.com/p-sternik/AOrchestra-opencode/issues/3)) ([f681e4a](https://github.com/p-sternik/AOrchestra-opencode/commit/f681e4aabe2862be1ad64c848485bd4d6bb42c15))
+* improve release reliability and routine permissions ([#4](https://github.com/p-sternik/AOrchestra-opencode/issues/4)) ([41c5392](https://github.com/p-sternik/AOrchestra-opencode/commit/41c5392b8eca059037f3d3f7450d4170445b1c0a))
+
+
+### Bug Fixes
+
+* isolate harness agents and modernize release automation ([efec229](https://github.com/p-sternik/AOrchestra-opencode/commit/efec229e6acaa262a07610ebcaf828d172154e99))
+
+
+### Continuous Integration
+
+* automatically merge validated release PRs ([#5](https://github.com/p-sternik/AOrchestra-opencode/issues/5)) ([9a78bd1](https://github.com/p-sternik/AOrchestra-opencode/commit/9a78bd11a13966fc5fcfc2c75c6fe500e6d4881d))
+
 ## [0.3.0](https://github.com/p-sternik/AOrchestra-opencode/compare/0.2.2...0.3.0) (2026-10-11)
 
 
