@@ -7,6 +7,9 @@ import { canonicalTarget, changedPaths, fingerprint, snapshot } from '../lib/fil
 import { Telemetry, counters, metricsRpc } from '../lib/telemetry';
 import { beginExecution, beginRepair, transition, workflow } from '../lib/workflow';
 import { taskVerifiers, validateVerificationRules, verificationPlan } from '../lib/verification';
+import { startUpdateCheck, updateOptions } from '../lib/update';
+import { versionRpc, versionStatus } from '../lib/version-status';
+import pkg from '../package.json';
 
 const idSchema = { type: 'string', pattern: '^[a-z0-9][a-z0-9._-]{0,79}$' };
 const strings = { type: 'array', maxItems: 100, items: { type: 'string', minLength: 1 }, uniqueItems: true };
@@ -42,6 +45,9 @@ export default Plugin.define({
     const content = skillText.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n/, '');
     await ctx.skill.transform(editor => editor.add({ id: BUNDLED_SKILL_ID, name: BUNDLED_SKILL_ID, path: skillPath, description: description ? JSON.parse(description) : undefined, content, autoinvoke: false } as Skill.Info));
     const options = ctx.options as Record<string, unknown>;
+    updateOptions(options);
+    let updates:ReturnType<typeof startUpdateCheck>={info:versionStatus(pkg.version),stop:()=>{}};
+    await ctx.rpc.register(versionRpc,{get:async()=>updates.info});
     const models = { fast: 'github-copilot/gpt-5.6-luna', balanced: 'github-copilot/gpt-5.6-terra', strong: 'github-copilot/gpt-5.6-sol', ...(options.models as Partial<Record<Tier, string>> | undefined) };
     const limit = (name: string, fallback: number) => {
       const value = options[name] ?? fallback;
@@ -129,6 +135,7 @@ export default Plugin.define({
         event.options.maxTokens = Math.min(Number(event.options.maxTokens ?? 6000), 6000);
       }
       if (event.agent === 'aorchestra' || event.agent === 'aorchestra-executor') {
+        if(event.agent==='aorchestra' && updates.message)event.system.push({type:'text',text:updates.message});
         const session = await ctx.session.get({ sessionID: event.sessionID });
         if(event.agent==='aorchestra'&&session.agent!=='aorchestra')throw new Error('AORCHESTRA_OWNER_INACTIVE');
         await observe(async()=>{if(event.agent==='aorchestra')await telemetry.begin(event.sessionID,Date.now(),counters(session));await telemetry.model(event.sessionID,`${event.model.providerID}/${event.model.id}${event.model.variant?`#${event.model.variant}`:''}`);});
@@ -416,6 +423,7 @@ export default Plugin.define({
         },
       });
     });
-    return ()=>eventStop.abort();
+    updates=startUpdateCheck(ctx);
+    return ()=>{eventStop.abort();updates.stop();};
   },
 });

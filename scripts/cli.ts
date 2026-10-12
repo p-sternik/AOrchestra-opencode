@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { createInterface } from 'node:readline/promises';
 import { stdin, stdout } from 'node:process';
 import { Npm } from '@opencode/util/npm';
-import { mergeSetup, readConfig, saveConfig, isAOrchestraTarget, globalEnvironment, primaryPermissions, setupPackage, assertSetupVersion, type Models } from '../lib/setup';
+import { mergeSetup, readConfig, saveConfig, isAOrchestraTarget, globalEnvironment, primaryPermissions, setupPackage, assertSetupVersion, assertManagedUpdate, type Models } from '../lib/setup';
 import { command, binary, privateClient, removeTemporary, assertRuntime, OPENCODE_RUNTIME_RANGE } from './runtime';
 import pkg from '../package.json';
 
@@ -26,18 +26,22 @@ try {
     process.exit(await child.exited);
   }
   if (operation!=='setup') throw new Error('UNKNOWN_COMMAND: use --help');
-  const allowed = new Set(['model','fast','balanced','strong','package','channel']);
+  const allowed = new Set(['model','fast','balanced','strong','package','channel','update-from']);
   if (args.slice(1).some(arg=>arg!=='--default' && (!arg.startsWith('--') || !allowed.has(arg.slice(2).split('=')[0]) || !arg.includes('=')))) throw new Error('UNKNOWN_OPTION: use --help');
   const spec = await setupPackage(pkg.version, value('package'), value('channel'), async () => {
     const revision=Bun.spawnSync(['git','ls-remote','https://github.com/p-sternik/AOrchestra-opencode.git','refs/heads/main'],{stdout:'pipe',stderr:'pipe'});
     if(revision.exitCode!==0)throw new Error('CANNOT_PIN_GITHUB_REVISION: provide --package explicitly');
     return new TextDecoder().decode(revision.stdout).split(/\s/)[0];
   });
+  const updateFrom=value('update-from');
+  if(updateFrom!==undefined && !/^aorchestra-opencode-v2@\d+\.\d+\.\d+$/.test(updateFrom))throw new Error('INVALID_UPDATE_SOURCE');
+  if(updateFrom && (!Bun.semver.satisfies(pkg.version,`>${updateFrom.split('@')[1]}`) || pkg.version.split('.')[0]!==updateFrom.split('@')[1].split('.')[0]))throw new Error('AUTO_UPDATE_VERSION_REJECTED');
+  if(updateFrom && (value('package') || value('channel') || args.includes('--default') || ['model','fast','balanced','strong'].some(value)))throw new Error('AUTO_UPDATE_OPTION_CONFLICT');
   const version = await command(['--version'],root);
   assertRuntime(version);
   const neutral = await mkdtemp(join(tmpdir(),'aorchestra-setup-'));
   try {
-    const env=globalEnvironment(process.env);
+    const env:NodeJS.ProcessEnv={...globalEnvironment(process.env), AORCHESTRA_DISABLE_UPDATE:'1'};
     const paths = await command(['debug','paths'],neutral,120000,env);
     const directory = resolve(env.OPENCODE_CONFIG_DIR ?? /^config\s+(.+)$/m.exec(paths)?.[1]?.trim() ?? (()=>{throw new Error('GLOBAL_CONFIG_UNKNOWN');})());
     const jsonc = join(directory,'opencode.jsonc'), json = join(directory,'opencode.json');
@@ -47,6 +51,7 @@ try {
     const configPath=jsoncText!==undefined?jsonc:json;
     const before=jsoncText??jsonText;
     const config=readConfig(before??'{}');
+    if(updateFrom)assertManagedUpdate(config,updateFrom);
     if (jsonText!==undefined && jsoncText!==undefined) {
       const lower=readConfig(jsonText);
       const targets = lower.plugins?.map((p:any)=>typeof p==='string'?p:p?.package) ?? [];
@@ -77,7 +82,7 @@ try {
     }
     if (!primary) throw new Error('MODEL_REQUIRED: pass --model=provider/model after provider sign-in');
     const priorOptions=config.plugins?.find((entry:any)=>entry && typeof entry==='object' && (isAOrchestraTarget(entry.package??'')||observedTargets.includes(entry.package)))?.options?.models;
-    const tier=(name:string)=>value(name)??(typeof priorOptions?.[name]==='string'&&available.includes(priorOptions[name])?priorOptions[name]:primary!);
+    const tier=(name:string)=>value(name)??(typeof priorOptions?.[name]==='string'&&(updateFrom || available.includes(priorOptions[name]))?priorOptions[name]:primary!);
     const models:Models={primary,fast:tier('fast'),balanced:tier('balanced'),strong:tier('strong')};
     for(const model of Object.values(models))if(!available.includes(model))throw new Error(`MODEL_NOT_IN_CATALOGUE: ${model}`);
     console.log('Installing through OpenCode’s native package manager…');
@@ -92,10 +97,12 @@ try {
     for(const id of ['aorchestra','aorchestra-executor']) {
       template.agents[id].system=await readFile(join(installed.directory,'instructions',`${id}.md`),'utf8');
     }
-    const after=mergeSetup(before??'{}',template,spec,models,args.includes('--default'),observedTargets);
+    const after=mergeSetup(before??'{}',template,spec,models,args.includes('--default'),observedTargets,value('package')===undefined && value('channel')!=='main');
     const permissionUpdate=primaryPermissions(config.agents?.aorchestra?.permissions,template.agents.aorchestra.permissions);
     const saved=await saveConfig(configPath,before,after);
-    console.log(JSON.stringify({version:installedPkg.version,package:spec,configPath,changed:saved.changed,backup:saved.backup??null,models,customPermissionsPreserved:permissionUpdate.customized},null,2));
+    const updatePolicy=readConfig(after).plugins.find((entry:any)=>entry?.package===spec)?.options;
+    const automaticUpdates=updatePolicy?.updateManagedPackage===spec && updatePolicy.autoUpdate!==false && updatePolicy.updateCheck!==false;
+    console.log(JSON.stringify({version:installedPkg.version,package:spec,configPath,changed:saved.changed,backup:saved.backup??null,models,automaticUpdates,customPermissionsPreserved:permissionUpdate.customized},null,2));
     if(permissionUpdate.customized)console.log('Custom AOrchestra permissions were preserved; routine-command defaults were not applied. Review agents.aorchestra.permissions to adopt them.');
     const check=Bun.spawn(['bun',join(installed.directory,'scripts/check.ts'),'--global'],{cwd:neutral,env:{...env,OPENCODE_BIN:binary},stdout:'inherit',stderr:'inherit'});
     if(await check.exited!==0)throw new Error('GLOBAL_CHECK_FAILED: config saved; review the diagnostic and backup before retrying');

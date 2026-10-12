@@ -210,6 +210,49 @@ reject older releases, prereleases, V1, V3 and malformed output. Acceptance by
 that gate does not establish compatibility with every future V2 release or
 successful model-driven behavior. No paid evaluation or publication ran.
 
+## Automatic updates (development branch)
+
+Local Linux checks on 2026-10-12 with Bun 1.2.15: typecheck, **88 tests (455
+assertions)**, **13 repo-context helper tests**, evaluation corpus validation,
+version consistency and production package installation/import/CLI help passed.
+Native smoke checks passed on **OpenCode 2.0.26 and 2.0.27** with `modelCalls: 0`.
+The updater is disabled during smoke checking to keep validation from installing
+or changing the user's global harness.
+
+Updater tests cover managed stable registrations, explicit package/main pins,
+disabled checks/installations, prerelease/major/downgrade handling, preserved model
+choices and settings, daily throttling after network/install failure, changes
+during a registry request, native file-lock coordination and global JSONC/native
+package identity checks. The native npm installer runs in a separate Bun worker:
+importing it into a 2.0.27 server plugin pulled in an Effect HTTP module that the
+host did not expose; moving it outside the server resolved the native load failure.
+
+The update policy/merge/install dispatch is tested with controlled dependencies.
+A complete background upgrade between published npm releases, real provider
+catalogue discovery in that upgrade and Windows process-tree timeout cleanup
+remain untested. No publication or paid
+model-backed evaluation ran. A failed post-update smoke check can leave the
+backed-up config visible; automatic rollback is not implemented.
+
+## TUI version status (development branch)
+
+Local Linux checks on 2026-10-12 with Bun 1.2.15: typecheck and **94 tests (486
+assertions)** passed, including real OpenTUI render tests for availability/restart
+labels, server-status failure, session switching, late-response rejection and
+request cancellation on disposal. Update tests verify structured status before
+and after installation, restoration during throttled startup and failure without
+claiming a completed update. The native smoke check also verifies the server
+version RPC without running a model.
+
+The actual sidebar version was observed in isolated, idle native TUI sessions on
+**OpenCode 2.0.26 and 2.0.27** with auto-update disabled and no prompts submitted.
+The native Solid JSX loader is used so renderables share the host renderer;
+direct local JSX-runtime calls had failed with `No renderer found` in the TUI.
+Available/restart status rendering uses controlled RPC responses in renderer
+tests. A complete published-package upgrade followed by an interactive restart,
+remote-server operation and Windows TUI behavior remain untested. No model-backed
+evaluation or publication ran.
+
 ## Pinned API differences
 
 OpenCode 2.0.26 supports permissions in session.create. The pinned API does not
