@@ -6,27 +6,21 @@ is not required. CI runs typecheck, behavior tests and a production package inst
 
 The publish job lives in **release.yml**, alongside Release Please. A separate
 release-event workflow would not reliably run for releases created by GITHUB_TOKEN.
-Publishing is gated by the repository variable NPM_PUBLISH_ENABLED and remains off
-until the package owner completes the following steps.
+Publishing is gated by the repository variable NPM_PUBLISH_ENABLED and the
+package owner's trusted publisher configuration. Verify both before a new release.
 
-## 1. Publish the package once
+## 1. Confirm the existing package
 
-Create/sign in to your npm account and enable the authentication required by npm.
-From a clean checkout of the published 0.3.0 tag:
+Version 0.3.0 is already available on npm. Confirm the package and its owner access
+before configuring the trusted publisher:
 
 ```sh
-git fetch --tags
-git checkout 0.3.0
-npm ci --ignore-scripts
-npm run pack:check
-npm login --registry=https://registry.npmjs.org
-npm publish --access public --ignore-scripts --registry=https://registry.npmjs.org
+npm view aorchestra-opencode-v2 version
 ```
 
-The package name is aorchestra-opencode-v2. Complete browser/OTP prompts locally;
-never send credentials to an agent or commit them. This initial upload creates
-the package whose settings you configure next. Verify the published version with
-`npm view aorchestra-opencode-v2 version`.
+Do not republish an existing version. Complete any npm owner sign-in or browser/OTP
+prompts locally; never send credentials to an agent or commit them. The existing
+package is `aorchestra-opencode-v2`.
 
 ## 2. Configure the trusted publisher on npm
 
@@ -61,11 +55,14 @@ of a new version validates the trusted publisher connection.
 
 For recovery, open Actions → Release → Run workflow on main and supply an existing
 numeric GitHub release tag in publish_tag. The job checks the release and version
-and skips an already published npm version. Re-running 0.3.0 after a manual upload
+and skips an already published npm version only when its registry integrity matches
+the archive packed from that tag. A mismatch fails for investigation; immutable
+versions and tags must not be replaced. Re-running 0.3.0 after a manual upload
 does not validate OIDC, because no upload occurs; use a new release for that.
 
-GitHub tag/release success and npm publish success are separate job results. A
-failed npm upload does not undo the GitHub release. Inspect the publish-npm job for
+The publish job validates version consistency, packs an archive and publishes that
+exact archive with provenance. GitHub tag/release success and npm publish success
+are separate job results. A failed npm upload does not undo the GitHub release. Inspect the publish-npm job for
 authentication/repository/workflow mismatches. Existing npm versions are immutable.
 
 ## Validation limits

@@ -23,8 +23,8 @@ adapted to native OpenCode V2 sessions, permissions and plugin storage.
 
 > **Status:** early-stage, tested with OpenCode **2.0.26**. Mechanism tests pass;
 > representative real-model brownfield effectiveness and cost remain unmeasured.
-> See [validation results](VALIDATION.md). The installable package is currently
-> distributed from GitHub main; the original 0.2.2 release predates this installer.
+> See [validation results](VALIDATION.md). Stable packages are available on npm.
+> Changes on main reach stable users only after a release is published.
 
 When any other agent is selected, harness tools and task-state
 injection are inactive. A globally installed plugin still appears in OpenCode's
@@ -51,7 +51,7 @@ This guide uses `opencode2`. If your V2 executable is named `opencode`, set
 ### 2. Run setup
 
 ```sh
-npx --allow-git=all --ignore-scripts --yes --package=git+https://github.com/p-sternik/AOrchestra-opencode.git#main aorchestra setup
+npx --ignore-scripts --yes --package=aorchestra-opencode-v2@latest aorchestra setup
 ```
 
 No manual copying or cloning is needed. Setup:
@@ -67,11 +67,21 @@ Model discovery uses the normal OpenCode database so existing provider sign-ins
 remain available; it queries the catalogue without running a task. The smoke
 check uses a separate test database.
 
-The GitHub default resolves main to an exact commit before registering the plugin.
-The command explicitly permits Git fetching for this invocation, as required by
-[npm 12](https://docs.npmjs.com/cli/v12/using-npm/config/#allow-git), and disables
-install lifecycle scripts. It does not change your global npm settings. Older npm
-versions may warn about the newer allow-git option; omit it if their CLI requires that.
+Stable setup installs the exact npm version of the CLI you invoked. Running the
+latest published CLI updates to that release; it does not install unreleased main
+changes. Installation disables lifecycle scripts and leaves global npm settings intact.
+
+For development changes, run the CLI from GitHub main and explicitly choose main:
+
+```sh
+npx --allow-git=all --ignore-scripts --yes --package=git+https://github.com/p-sternik/AOrchestra-opencode.git#main aorchestra setup --channel=main
+```
+
+This resolves main to an exact commit. The per-command Git allowance is required
+by [npm 12](https://docs.npmjs.com/cli/v12/using-npm/config/#allow-git); older npm
+versions may warn about it. Channel selection and explicit `--package` are mutually
+exclusive. These channel defaults are available in releases containing this change;
+the original 0.3.0 CLI defaults to GitHub main.
 
 The selected source/config/backup paths are printed. Agent instructions come from
 that installed package and are stored in the global config; no checkout paths
@@ -80,7 +90,7 @@ are required. The skill stays bundled with the plugin.
 For non-interactive setup, provide an available model explicitly:
 
 ```sh
-npx --allow-git=all --ignore-scripts --yes --package=git+https://github.com/p-sternik/AOrchestra-opencode.git#main aorchestra setup --model=provider/model
+npx --ignore-scripts --yes --package=aorchestra-opencode-v2@latest aorchestra setup --model=provider/model
 ```
 
 Replace `provider/model` with an actual identifier. Existing available tier models
@@ -102,23 +112,31 @@ opencode2 run --standalone --agent aorchestra 'Fix the missing-user error. Keep 
 ```
 
 No project config or `OPENCODE_CONFIG` assignment is required. OpenCode's native
-permissions still apply, including requests to run shell commands. Catalogue
+permissions still apply. New default permissions allow existing `typecheck`,
+`lint` and `test` package scripts, focused Bun tests and routine Git inspection.
+Other shell commands ask, and Git push retains its deny rule. These allowances
+trust repository scripts to execute code; they are not process isolation. Catalogue
 availability and installation checks do not establish successful provider inference.
 
 ## Check, update and report
 
 ```sh
-npx --allow-git=all --ignore-scripts --yes --package=git+https://github.com/p-sternik/AOrchestra-opencode.git#main aorchestra check
-npx --allow-git=all --ignore-scripts --yes --package=git+https://github.com/p-sternik/AOrchestra-opencode.git#main aorchestra check --project=/absolute/path/to/project
-npx --allow-git=all --ignore-scripts --yes --package=git+https://github.com/p-sternik/AOrchestra-opencode.git#main aorchestra report --project=/absolute/path/to/project --output=/path/to/report.md
+npx --ignore-scripts --yes --package=aorchestra-opencode-v2@latest aorchestra check
+npx --ignore-scripts --yes --package=aorchestra-opencode-v2@latest aorchestra check --project=/absolute/path/to/project
+npx --ignore-scripts --yes --package=aorchestra-opencode-v2@latest aorchestra report --project=/absolute/path/to/project --output=/path/to/report.md
 ```
 
-Run setup again to update to the latest GitHub commit. It replaces recognized
-AOrchestra registrations, preserves existing budgets and model choices where
+Run the latest published CLI with setup again to update to a stable release.
+It replaces recognized AOrchestra registrations, preserves existing budgets and model choices where
 available, and avoids rewriting an unchanged config. For a specific published npm
 version or Git revision, use `setup --package=<npm-or-git-spec>` with the matching
-CLI version. The package name is `aorchestra-opencode-v2`; npm registry publication
-is not yet available, so use the working GitHub command above.
+CLI version; a version mismatch fails before saving global config. The package
+name is `aorchestra-opencode-v2`. A main-channel update uses the GitHub command above.
+
+Known earlier default permissions are migrated automatically. Customized ordered
+rules are preserved, and setup reports `customPermissionsPreserved: true` when
+routine-command defaults were not applied. Review your global agent's permissions
+to adopt those defaults. Project-local overrides remain effective.
 
 Reports make no model calls or policy changes. Costs are estimates, and runtime
 completion alone does not establish semantic correctness. To undo setup, use the

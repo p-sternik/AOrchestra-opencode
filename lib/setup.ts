@@ -3,9 +3,34 @@ import { readFile, writeFile, mkdir, rename, unlink, realpath } from 'node:fs/pr
 import { dirname } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { BUNDLED_SKILL_ID } from './core';
+import legacyPermissions from './primary-permissions-v0.json';
 
 type RecordValue = Record<string, any>;
 export type Models = { primary: string; fast: string; balanced: string; strong: string };
+const permissionKey = (rules: unknown) => JSON.stringify(rules, (key, value) =>
+  value && typeof value === 'object' && !Array.isArray(value)
+    ? Object.fromEntries(Object.entries(value).sort(([a], [b]) => a.localeCompare(b))) : value);
+export function primaryPermissions(prior: unknown, defaults: unknown): {rules: unknown; customized: boolean} {
+  const rules = Array.isArray(prior) ? prior.map(rule => rule?.action === 'skill' && rule.resource === 'repo-context' && rule.effect === 'allow'
+    ? {...rule, resource: BUNDLED_SKILL_ID} : rule) : prior;
+  if (rules === undefined || permissionKey(rules) === permissionKey(legacyPermissions)) return {rules: defaults, customized: false};
+  return {rules, customized: permissionKey(rules) !== permissionKey(defaults)};
+}
+export async function setupPackage(version: string, explicit: string | undefined, channel: string | undefined, mainRevision: () => Promise<string>): Promise<string> {
+  if (channel !== undefined && channel !== 'stable' && channel !== 'main') throw new Error('INVALID_CHANNEL: use stable or main');
+  if (explicit !== undefined && channel !== undefined) throw new Error('PACKAGE_CHANNEL_CONFLICT: choose --package or --channel');
+  if (explicit !== undefined) {
+    if (!explicit.trim()) throw new Error('PACKAGE_REQUIRED');
+    return explicit;
+  }
+  if (channel !== 'main') return `aorchestra-opencode-v2@${version}`;
+  const revision = await mainRevision();
+  if (!/^[a-f0-9]{40}$/.test(revision)) throw new Error('CANNOT_PIN_GITHUB_REVISION: provide --package explicitly');
+  return `git+https://github.com/p-sternik/AOrchestra-opencode.git#${revision}`;
+}
+export function assertSetupVersion(cliVersion: string, packageVersion: string, spec: string): void {
+  if (cliVersion !== packageVersion) throw new Error(`CLI_PACKAGE_VERSION_MISMATCH: run the CLI from ${spec} with setup --package=${spec}`);
+}
 export function globalEnvironment(input: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
   const env={...input};
   delete env.OPENCODE_CONFIG;delete env.OPENCODE_CONFIG_CONTENT;
@@ -50,7 +75,7 @@ export function mergeSetup(text: string, template: RecordValue, spec: string, mo
     if (prior !== undefined && (!prior || typeof prior!=='object' || Array.isArray(prior))) throw new Error('INVALID_EXISTING_AGENT');
     const agent = {...template.agents[id],...prior,system:template.agents[id].system};
     if (id==='aorchestra') agent.model=models.primary;
-    if (id==='aorchestra' && Array.isArray(agent.permissions)) agent.permissions=agent.permissions.map((rule:any)=>rule.action==='skill'&&rule.resource==='repo-context'&&rule.effect==='allow'?{...rule,resource:BUNDLED_SKILL_ID}:rule);
+    if (id==='aorchestra') agent.permissions=primaryPermissions(prior?.permissions, template.agents[id].permissions).rules;
     set(['agents',id],agent);
   }
   if (makeDefault || existing.default_agent === undefined) set(['default_agent'],'aorchestra');

@@ -9,7 +9,7 @@ export type Workflow = {
 const allowed: Record<Phase, Phase[]> = {
   discover: ['plan', 'blocked'], plan: ['execute', 'blocked'],
   execute: ['verify', 'blocked'], verify: ['repair', 'complete', 'blocked'],
-  repair: ['verify', 'blocked'], complete: [], blocked: ['plan', 'execute', 'verify', 'repair'],
+  repair: ['verify', 'blocked'], complete: ['blocked'], blocked: ['plan', 'execute', 'verify', 'repair'],
 };
 
 // Old v1 tasks acquire workflow metadata in-place; status/budgets/baseline survive.

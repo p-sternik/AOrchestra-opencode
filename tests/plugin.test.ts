@@ -6,7 +6,7 @@ import plugin from '../plugins/aorchestra';
 import { Ledger, type Handoff } from '../lib/core';
 
 async function fixture(options: Record<string,unknown> = {}) {
-  const scratch = resolve(import.meta.dir, '../../../work/aorchestra-v2-tests');
+  const scratch = resolve(import.meta.dir, '../work/aorchestra-v2-tests');
   await mkdir(scratch, { recursive: true });
   const root = await mkdtemp(join(scratch, 'run-'));
   await writeFile(join(root, 'api.ts'), 'export const oldApi = true;\n');
@@ -14,6 +14,7 @@ async function fixture(options: Record<string,unknown> = {}) {
   const hooks = new Map<string, (event: any) => Promise<void>>();
   const tools = new Map<string, any>();
   const creations: any[] = [];
+  const interruptions: any[] = [];
   const prompts: any[] = [];
   let currentAgent='aorchestra';
   const skills: any[] = [];
@@ -29,7 +30,7 @@ async function fixture(options: Record<string,unknown> = {}) {
       hook: async (name: string, callback: any) => { hooks.set(`session:${name}`, callback); },
       get: async ({sessionID}:any) => ({ id:sessionID,agent:sessionID==='primary'?currentAgent:'aorchestra-executor', location:{directory:root}, cost: 0.01, tokens: { input: 10, output: 5, reasoning: 0, cache: { read: 0, write: 0 } }, outcome: 'succeeded' }),
       create: async (input: any) => { creations.push(input); return { id: `child-${creations.length}` }; },
-      prompt: async (input:any) => {prompts.push(input);}, wait: async () => {}, interrupt: async () => {},
+      prompt: async (input:any) => {prompts.push(input);}, wait: async () => {}, interrupt: async (input:any) => {interruptions.push(input);},
       context: async () => [{ type: 'assistant', content: [{ type: 'text', text: 'STATUS: PARTIAL\nRESULT: investigated\nEVIDENCE: read api.ts\nCHANGED: none\nOPEN: primary validation' }] }],
     },
     permission: { hook: async (name: string, callback: any) => { hooks.set(`permission:${name}`, callback); } },
@@ -49,7 +50,7 @@ async function fixture(options: Record<string,unknown> = {}) {
   const accept = () => invoke('aorchestra_task', { operation: 'accept', taskId: 'api', compatibilityReview: 'oldApi export preserved and focused test passed' });
   const clean = async () => { if(cleanup)await cleanup();if (!root.startsWith(`${scratch}\\`) && !root.startsWith(`${scratch}/`)) throw new Error('TEST_CLEANUP_ESCAPE'); await rm(root, { recursive: true }); };
   const emit=(event:any)=>{events.push(event);wake?.();};
-  return { root, ctx, hooks, tools, data, creations, prompts, skills, rpc,emit, invoke, register, start, verify, accept, clean, switchAgent:(agent:string)=>{currentAgent=agent;} };
+  return { root, ctx, hooks, tools, data, creations, interruptions, prompts, skills, rpc,emit, invoke, register, start, verify, accept, clean, switchAgent:(agent:string)=>{currentAgent=agent;} };
 }
 
 test('bundled repo-context is available by explicit ID without automatic invocation', async () => {
@@ -282,4 +283,80 @@ test('resume after plugin restart preserves baseline, events, budgets and pendin
       expect((await new Ledger(f.ctx.storage).read('primary')).delegations).toBe(0);
     }finally{if(cleanup)await cleanup();}
   }finally{await f.clean();}
+});
+
+test('failed or unverifiable reruns revoke accepted work and survive restart without restoring evidence',async()=>{
+  for(const missingExit of [false,true]) {
+    const f=await fixture();try {
+      await f.register();await f.start();await f.verify();await f.accept();
+      const ledger=new Ledger(f.ctx.storage);
+      const before=(await ledger.read('primary')).tasks[0];
+      await f.verify(1,'unrelated command');
+      expect((await ledger.read('primary')).tasks[0].status).toBe('complete');
+      await f.verify();expect((await ledger.read('primary')).tasks[0].receipts).toEqual(before.receipts);
+      if(missingExit)await f.hooks.get('tool:execute.after')!({tool:'shell',agent:'aorchestra',sessionID:'primary',id:'missing-exit',input:{command:'bun test api.test.ts'},status:'completed',result:{metadata:{}}});
+      else await f.verify(1);
+      const revoked=(await ledger.read('primary')).tasks[0];
+      expect(revoked.status).toBe('blocked');expect(revoked.workflow!.phase).toBe('blocked');
+      expect(revoked.receipts).toEqual({});expect(revoked.compatibilityReview).toBeUndefined();
+      expect(revoked.baseline).toBe(before.baseline!);expect(revoked.attempts).toEqual(before.attempts);
+      expect(revoked.verification!.observations.tests.passed).toBe(false);
+      const system:any[]=[];
+      await f.hooks.get('session:context')!({agent:'aorchestra',sessionID:'primary',model:{providerID:'test',id:'main'},tools:{shell:{}},options:{},system});
+      expect(system[0].text).toContain('"phase":"blocked"');expect(system[0].text).toContain('Accepted evidence revoked');
+      const cleanup=await plugin.setup(f.ctx);
+      try {
+        await f.invoke('aorchestra_task',{operation:'resume',taskId:'api'});
+        await f.verify();expect((await ledger.read('primary')).tasks[0]).toEqual(revoked);
+        await f.start();await expect(f.accept()).rejects.toThrow('VERIFIER_MISSING_OR_STALE');
+        await f.verify();await f.accept();expect((await ledger.read('primary')).tasks[0].status).toBe('complete');
+      }finally{if(cleanup)await cleanup();}
+    }finally{await f.clean();}
+  }
+});
+
+test('accepted evidence revocation blocks transitive dependents and stops active native children',async()=>{
+  const f=await fixture();try {
+    await f.register();await f.start();await f.verify();await f.accept();
+    for(const [id,dependsOn] of [['consumer',['api']],['downstream',['consumer']]] as const) {
+      await f.invoke('aorchestra_task',{operation:'register',task:{id,kind:'analysis',instruction:'Inspect consumers',context:'',dependsOn:[...dependsOn],writePaths:[],preserve:[],verifiers:[{id:'read',tool:'read',input:{filePath:'api.ts'},expect:{contains:'oldApi'}}]}});
+    }
+    const ledger=new Ledger(f.ctx.storage);
+    await ledger.mutate('primary',state=>{
+      state.delegations=2;
+      const consumer=state.tasks[1];consumer.status='complete';consumer.workflow!.phase='complete';consumer.compatibilityReview='Reviewed';consumer.baseline=state.tasks[0].baseline;consumer.workflow!.repairs=1;consumer.receipts={read:state.tasks[0].receipts.tests};
+      const downstream=state.tasks[2];downstream.status='running';downstream.workflow!.phase='execute';downstream.baseline=state.tasks[0].baseline;downstream.workflow!.repairs=2;
+      downstream.attempts.push({tier:'balanced',reason:'Independent check',delta:'',child:'active-child',status:'running',startedAt:1});
+    });
+    await f.ctx.storage.set('child/active-child',{owner:'primary',taskId:'downstream',root:f.root,tools:['read'],writePaths:[],kind:'analysis',active:true});
+    await f.verify(1);
+    const state=await ledger.read('primary');
+    expect(state.tasks.map(t=>t.status)).toEqual(['blocked','blocked','blocked']);
+    expect(state.tasks.map(t=>t.receipts)).toEqual([{},{},{}]);
+    expect(state.tasks.map(t=>t.compatibilityReview)).toEqual([undefined,undefined,undefined]);
+    expect(state.tasks.map(t=>t.workflow!.repairs)).toEqual([0,1,2]);expect(state.delegations).toBe(2);
+    expect(state.tasks[2].attempts[0].status).toBe('error');expect(state.tasks[2].baseline).toBe(state.tasks[0].baseline!);
+    expect(f.interruptions).toEqual([{sessionID:'active-child',resume:false}]);
+    expect((await f.ctx.storage.get('child/active-child') as any).active).toBe(false);
+    await expect(f.invoke('aorchestra_task',{operation:'start',taskId:'consumer'})).rejects.toThrow('DEPENDENCY_UNMET');
+    await expect(f.hooks.get('tool:execute.before')!({agent:'aorchestra-executor',sessionID:'active-child',tool:'read'})).rejects.toThrow('WORKER_TOOL_DENIED');
+  }finally{await f.clean();}
+});
+
+test('a late native child result cannot restore review after dependency evidence was revoked',async()=>{
+  const f=await fixture();let release=()=>{};try {
+    await f.register();await f.start();await f.verify();await f.accept();
+    await f.invoke('aorchestra_task',{operation:'register',task:{id:'consumer',kind:'analysis',instruction:'Inspect consumers',context:'',handoff:{sources:[{ref:'api.ts',status:'observed',revision:'unknown'}],facts:[],unknowns:[],checks:[]},dependsOn:['api'],writePaths:[],preserve:[],verifiers:[{id:'read',tool:'read',input:{filePath:'api.ts'},expect:{contains:'oldApi'}}]}});
+    let waiting=()=>{};const entered=new Promise<void>(resolve=>{waiting=resolve;});
+    const gate=new Promise<void>(resolve=>{release=resolve;});
+    f.ctx.session.wait=async()=>{waiting();await gate;};
+    const delegated=f.invoke('aorchestra_delegate',{taskId:'consumer',model:'balanced',tools:['read'],routingEvidence:'Bounded consumer analysis'}).catch((error:Error)=>error);
+    await entered;await f.verify(1);
+    const before=await new Ledger(f.ctx.storage).read('primary');
+    release();const result=await delegated;
+    expect(result).toBeInstanceOf(Error);expect(result.message).toBe('DELEGATION_REVOKED');
+    const after=await new Ledger(f.ctx.storage).read('primary');
+    expect(after.tasks).toEqual(before.tasks);expect(after.delegations).toBe(before.delegations);
+    expect((await f.ctx.storage.get('child/child-1') as any).active).toBe(false);
+  }finally{release();await f.clean();}
 });

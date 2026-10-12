@@ -50,9 +50,10 @@ imports the plugin and runs CLI help on Windows/Linux CI. The package ships its
 TypeScript entrypoint for the Bun-based OpenCode host, instructions and skill;
 the Node CLI shim invokes Bun. No install lifecycle scripts are required.
 
-GitHub main distribution works through npm/npx Git package specifiers without npm
-publication. The setup CLI pins the plugin to a Git commit and delegates downloading
-to native OpenCode plugin add. Registry publication is a separate operation after
+Stable distribution uses npm/npx with an exact installed version. GitHub main
+distribution remains an explicit development channel through Git package specifiers.
+The setup CLI pins the plugin to the CLI version or a main Git commit and delegates
+downloading to native OpenCode plugin add. Registry publication is a separate operation after
 an appropriate Release Please version is merged and npm authentication is available:
 
 ```sh
@@ -63,8 +64,9 @@ npm publish --access public
 No npm token is stored in this repository or release workflow. Automatic npm
 publication uses the publish-npm job in release.yml and requires the package owner's
 Trusted Publisher configuration plus NPM_PUBLISH_ENABLED=true. Follow the
-[publishing guide](docs/npm-publishing.md). Update README distribution status only
-after confirming an actual registry upload.
+[publishing guide](docs/npm-publishing.md). Version 0.3.0 is available on npm;
+describe a new version as published only after confirming its registry upload. Retries verify registry archive integrity
+against the exact release tag before skipping an existing version.
 
 Compare releases:
 

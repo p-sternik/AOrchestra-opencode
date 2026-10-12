@@ -44,7 +44,8 @@ The native installation was exercised with an isolated Git package fixture and
 global JSONC configuration, using native plugin add and then global smoke checking
 with zero model calls. The bundle uses the ID aorchestra-repo-context and preserves
 other skill discovery. This does not prove provider inference or every third-party
-configuration. npm registry publication has not been performed.
+configuration. At the time of these initial package checks, npm registry
+publication had not been performed. Version 0.3.0 is now available on npm.
 
 The packaged Node/Bun CLI was exercised outside the source checkout. Repeating
 setup against the same pinned source returned changed=false, no new backup, and
@@ -85,6 +86,42 @@ behavior and scope checks, and report both successful and blocked/failed runs.
 Compare the prior harness with this controller before changing routing. The three
 existing evaluation fixtures are smoke coverage, not that benchmark.
 
+## Release, permissions and acceptance revocation
+
+Development checks on Linux on 2026-10-12, with Bun 1.2.15 and OpenCode 2.0.26:
+**76 harness/setup/release tests passed, 325 assertions**, plus **13 repo-context
+helper tests**. Typecheck, evaluation corpus validation, version consistency and
+production package installation/import/CLI help passed. Repository-profile and
+isolated global-discovery native smoke checks passed with **zero model calls**.
+The global fixture is separate from the user's actual global configuration.
+
+Setup tests cover stable version pinning, explicit main/commit selection, option
+conflicts, CLI/package version mismatch, known-default permission migration and
+custom ordered-policy preservation. The native smoke evaluates routine check/Git
+resources, unknown commands, compound-resource requests, a redirected package
+check and executor shell denial through the pinned permission API. This does not
+exercise every shell parser/platform or arbitrary command isolation.
+
+Revocation tests cover accepted tasks, missing exit metadata, transitive dependent
+acceptance, active child interruption, late child results, read-only restart,
+explicit reacceptance and preserved baselines/budgets. Release tests execute the
+actual publication-check script using real npm archives and a local registry
+fixture, covering matching integrity, mismatches, absent versions and HTTP errors.
+No package was published and no paid evaluation ran. Windows checks and actual
+OIDC publication remain target-environment work; the release-script test is Linux
+only because the publication job runs on Linux.
+
+Further brownfield priorities remain separate from this change:
+
+- Root/workspace and dependent-package coverage: nearest-package discovery alone
+  does not validate consumers of shared APIs; use explicit predicates/rules today.
+- Generated artifacts: test-created files can invalidate receipts or violate exact
+  write scope; review artifact exclusions without hiding meaningful source changes.
+- Snapshot cost: measure whole-tree hashing on large repositories before replacing
+  the snapshot provider or weakening freshness checks.
+- Effectiveness: compare matched historical tasks with independent regression and
+  scope checks, counting blocked/failed runs and full workflow cost.
+
 ## What these checks establish
 
 Routing/source-handoff changes are covered by tests that reject missing provenance
@@ -114,8 +151,9 @@ remain unchanged, switched-agent telemetry is incomplete rather than contaminate
 and outstanding children are interrupted/blocked. Global plugin discovery logs
 remain normal; plugin loading is distinct from agent execution.
 
-npm OIDC publishing is configured but disabled until its owner enables the
-repository variable and configures npm. No registry upload is claimed.
+Version 0.3.0 is available in the npm registry. The workflow requires the owner's
+trusted publisher configuration and NPM_PUBLISH_ENABLED=true; successful OIDC
+publication is not established by local tests or the existence of that version.
 
 Successful model-driven DIRECT/delegated coding, semantic compatibility on real
 legacy systems, model availability/prices, provider-specific native exit metadata,
