@@ -6,7 +6,15 @@ For installation and everyday use, start with the [README](../README.md).
 
 Prefer the packaged `aorchestra setup` command in the [README](../README.md).
 It invokes native plugin add, pins the stable npm version or explicit main commit,
-embeds the installed instructions and merges global JSONC. For manual/source installation, discover the directory with
+embeds the installed instructions and merges global JSONC. Native
+`opencode plugin add aorchestra-opencode-v2@latest` (or `opencode2 plugin add`)
+only registers the plugin; run setup to configure or update its agents and models.
+Setup and native checks accept stable OpenCode `>=2.0.26 <3.0.0`, with API packages
+pinned to 2.0.26. Native checks passed on runtimes 2.0.26 and 2.0.27; other accepted
+versions still need integration checking. CLIs through 0.4.2 enforce the former
+exact-version gate. See [runtime validation](../VALIDATION.md#runtime-version-compatibility).
+
+For manual/source installation, discover the directory with
 `opencode2 debug paths`, checking
 `OPENCODE_CONFIG_DIR` and the loaded config sources as described in the
 [setup guide](setup-for-agents.md). Merge the template into the existing global
@@ -262,8 +270,10 @@ npm run pack:check
 bun run check
 ```
 
-The native smoke check requires the pinned OpenCode runtime. It uses a temporary
-localhost server and isolated database under `work/runtime`, tests plugin/skill
+The native smoke check accepts stable OpenCode >=2.0.26 <3.0.0 runtimes.
+The API packages remain pinned to 2.0.26; acceptance by the version gate is
+separate from successful native integration checks on that runtime. The check uses
+a temporary localhost server and isolated database under `work/runtime`, tests plugin/skill
 loading and controlled failure telemetry, and makes zero external model calls.
 CI runs the deterministic checks on Windows and Linux; native smoke is a local
 runtime integration check.

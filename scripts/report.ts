@@ -2,7 +2,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { OpenCode } from '@opencode/client/promise';
 import { Service } from '@opencode/client/service';
-import { privateClient } from './runtime';
+import { privateClient, supportedRuntime } from './runtime';
 import { metricsRpc, type Run } from '../lib/telemetry';
 import { aggregate, markdown } from '../lib/report';
 const option=(name:string)=>process.argv.find(arg=>arg.startsWith(`--${name}=`))?.slice(name.length+3);
@@ -21,7 +21,7 @@ if(input){
   let client:ReturnType<typeof OpenCode.make>;
   if(server){const password=process.env.OPENCODE_SERVER_PASSWORD;client=OpenCode.make({baseUrl:server,headers:password?{authorization:`Basic ${Buffer.from(`opencode:${password}`).toString('base64')}`}:{}});}
   else{
-    const endpoint=process.env.OPENCODE_DB?undefined:await Service.discover({version:'2.0.26'});
+    const endpoint=process.env.OPENCODE_DB?undefined:await Service.discover({version:supportedRuntime});
     if(endpoint)client=OpenCode.make({baseUrl:endpoint.url,headers:Service.headers(endpoint)});
     else{const temporary=await privateClient(project,{...process.env,OPENCODE_CONFIG:resolve(root,'opencode.json')});client=temporary.client;close=temporary.close;}
   }

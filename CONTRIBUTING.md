@@ -3,8 +3,8 @@
 Keep changes small, reuse existing patterns and add tests that demonstrate changed
 behavior. Installation is in [README.md](README.md); the full check commands are
 in the [technical reference](docs/reference.md#validation-and-evaluation). Native
-smoke checks require OpenCode 2.0.26; model evaluation is opt-in and can incur
-provider costs.
+smoke checks accept stable OpenCode >=2.0.26 <3.0.0 (tested runtimes: 2.0.26 and 2.0.27);
+model evaluation is opt-in and can incur provider costs.
 
 ## Commit messages
 

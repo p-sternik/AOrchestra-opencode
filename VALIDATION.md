@@ -188,10 +188,34 @@ evaluation. Prompt rules are not behavioral guarantees. Native-edit checks do no
 prove isolation of arbitrary primary shell commands. Reports do not establish
 causal superiority of one routing strategy over another.
 
+## Runtime version compatibility
+
+Local Linux checks on 2026-10-12 with Bun 1.2.15: typecheck, **78 tests (386
+assertions)**, production package installation/import/CLI help, version consistency
+and diff checks passed. The no-inference native smoke check passed on both
+**OpenCode 2.0.26 and 2.0.27**, using the pinned 2.0.26 API packages. Both checks
+observed plugin loading, agent resolution, native session creation, permission
+policy evaluation, bundled skill registration and failure telemetry, with
+`modelCalls: 0`.
+
+Native `plugin add aorchestra-opencode-v2@0.4.1` also succeeded on 2.0.27 with a
+temporary global config and database. Its resulting config contained only the
+plugin registration; it did not create the two bundled agent definitions. This
+checks installation of the published package, while the smoke and package checks
+above cover the local changes. Full provider-backed setup remains untested.
+
+Setup, smoke checking and managed-service report discovery now share the runtime
+range `>=2.0.26 <3.0.0`. Version-gate tests accept newer stable V2 versions and
+reject older releases, prereleases, V1, V3 and malformed output. Acceptance by
+that gate does not establish compatibility with every future V2 release or
+successful model-driven behavior. No paid evaluation or publication ran.
+
 ## Pinned API differences
 
 OpenCode 2.0.26 supports permissions in session.create. The pinned API does not
 provide the newer permission.rules interface. Explicit local plugins must target
 a directory; plugins/aorchestra/index.ts supplies the portable entrypoint. Current
 online documentation can differ from this tag. Re-run typecheck, tests and native
-smoke before upgrading the runtime/API packages together.
+smoke when changing runtime or API package versions. Runtime and pinned API
+versions may differ within the accepted range; native compatibility must still
+be observed for the installed runtime.

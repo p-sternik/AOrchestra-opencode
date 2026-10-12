@@ -7,10 +7,15 @@ development follows [AGENTS.md](../AGENTS.md).
 ## 1. Establish the environment
 
 Identify the OS/shell, V2 executable and prerequisites in the
-[README](../README.md#1-check-the-prerequisites). Verify the binary reports 2.0.26;
-set OPENCODE_BIN if it is named opencode rather than opencode2. Resolve missing
-prerequisites within the user's authorized scope. Provider sign-in may require
+[README](../README.md#1-check-the-prerequisites). Verify the binary reports a stable
+version >=2.0.26 and <3.0.0; set OPENCODE_BIN if it is named opencode rather than
+opencode2. Resolve missing prerequisites within the user's authorized scope. Provider sign-in may require
 their interaction; never request credential contents.
+
+The pinned API packages remain 2.0.26; native checks have passed on runtimes
+2.0.26 and 2.0.27. Version acceptance alone does not establish runtime compatibility.
+Published CLIs through 0.4.2 still enforce exactly 2.0.26; use a release containing
+the expanded range for a newer runtime, or the main channel if explicitly requested.
 
 Run `<binary> debug paths` and inspect OPENCODE_CONFIG_DIR, OPENCODE_CONFIG,
 OPENCODE_CONFIG_CONTENT and XDG config overrides. A target project is optional for
@@ -33,6 +38,12 @@ For a non-interactive agent, provide `--model=provider/model`, using an observed
 model identifier from the existing configuration/catalogue. Use explicit tier flags only when requested;
 otherwise setup retains available tier choices or uses the main model for all tiers.
 Use `--default` only to replace an existing chosen default agent.
+
+If the user already ran `opencode plugin add aorchestra-opencode-v2@latest`
+(or the equivalent `opencode2` command), continue with setup to merge the agents,
+instructions, permissions and models. Native plugin add registers the package;
+it does not perform the full harness configuration. Setup handles an existing
+registration and is also the supported update path.
 
 The CLI discovers global JSON/JSONC, selects JSONC if present, validates input,
 installs through native plugin add, backs up a changed config and merges only

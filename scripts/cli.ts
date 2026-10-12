@@ -5,7 +5,7 @@ import { createInterface } from 'node:readline/promises';
 import { stdin, stdout } from 'node:process';
 import { Npm } from '@opencode/util/npm';
 import { mergeSetup, readConfig, saveConfig, isAOrchestraTarget, globalEnvironment, primaryPermissions, setupPackage, assertSetupVersion, type Models } from '../lib/setup';
-import { command, binary, privateClient, removeTemporary } from './runtime';
+import { command, binary, privateClient, removeTemporary, assertRuntime, OPENCODE_RUNTIME_RANGE } from './runtime';
 import pkg from '../package.json';
 
 const root = resolve(import.meta.dir,'..');
@@ -13,7 +13,7 @@ const args = process.argv.slice(2);
 const operation = args[0];
 const value = (name:string)=>args.find(arg=>arg.startsWith(`--${name}=`))?.slice(name.length+3);
 if (!operation || args.includes('--help') || operation==='help') {
-  console.log(`AOrchestra ${pkg.version}\n\nUsage: aorchestra setup [--model=provider/model] [--fast=...] [--balanced=...] [--strong=...] [--default] [--channel=stable|main | --package=npm-or-git-spec]\n       aorchestra check [--project=/path]\n       aorchestra report [report options]\n\nRequires Bun and OpenCode 2.0.26. Set OPENCODE_BIN if V2 is not named opencode2.\nSetup preserves global JSONC and makes no model calls. Stable setup pins this CLI version from npm; --channel=main pins a Git commit.`);
+  console.log(`AOrchestra ${pkg.version}\n\nUsage: aorchestra setup [--model=provider/model] [--fast=...] [--balanced=...] [--strong=...] [--default] [--channel=stable|main | --package=npm-or-git-spec]\n       aorchestra check [--project=/path]\n       aorchestra report [report options]\n\nRequires Bun and OpenCode ${OPENCODE_RUNTIME_RANGE}. Set OPENCODE_BIN if V2 is not named opencode2.\nSetup preserves global JSONC and makes no model calls. Stable setup pins this CLI version from npm; --channel=main pins a Git commit.`);
   process.exit(0);
 }
 if (operation==='--version') {console.log(pkg.version);process.exit(0);}
@@ -34,7 +34,7 @@ try {
     return new TextDecoder().decode(revision.stdout).split(/\s/)[0];
   });
   const version = await command(['--version'],root);
-  if (/(\d+\.\d+\.\d+)/.exec(version)?.[1]!=='2.0.26') throw new Error('OpenCode 2.0.26 is required');
+  assertRuntime(version);
   const neutral = await mkdtemp(join(tmpdir(),'aorchestra-setup-'));
   try {
     const env=globalEnvironment(process.env);
