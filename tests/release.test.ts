@@ -50,8 +50,12 @@ test.skipIf(process.platform === 'win32')('release retries require matching arch
     expect(inline).toBeDefined();
     const script=inline!.split('\n').map(line=>line.replace(/^          /,'')).join('\n').replace('https://registry.npmjs.org',server.url.origin);
     const pack=Bun.spawn(['npm','pack','--json','--ignore-scripts'],{cwd:root,stdout:'pipe',stderr:'pipe'});
-    const packed=JSON.parse(await new Response(pack.stdout).text())[0];
-    expect(await pack.exited).toBe(0);integrity=packed.integrity;
+    const parsed=JSON.parse(await new Response(pack.stdout).text());
+    const packed=Array.isArray(parsed)?parsed[0]:(parsed.files?parsed:parsed['aorchestra-release-fixture']);
+    expect(await pack.exited).toBe(0);
+    expect(packed?.filename).toBeString();
+    expect(packed?.integrity).toBeString();
+    integrity=packed.integrity;
     for(const scenario of [{status:200,match:true,success:true},{status:200,match:false,success:false},{status:404,match:false,success:true},{status:503,match:false,success:false}]) {
       status=scenario.status;integrity=scenario.match?packed.integrity:'sha512-mismatch';
       const output=join(root,`output-${status}-${scenario.match}`);
