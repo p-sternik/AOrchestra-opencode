@@ -49,11 +49,17 @@ Node 24, npm 12.2.0 and id-token: write to authenticate through OIDC.
 
 ## 4. Publish the next version
 
-Review and merge the next Release Please PR. Release creates the Git tag/GitHub
-Release, then validates and publishes that exact tagged package. The first upload
+Merge a Conventional Commit change into main. Release Please prepares the release
+PR; Windows/Linux validation must pass before the workflow automatically merges
+its exact validated revision. The workflow explicitly dispatches Release on main
+because a GITHUB_TOKEN merge does not trigger push workflows. That run validates
+main, creates the Git tag/GitHub Release, then validates and publishes that exact
+tagged package. No manual release PR merge is needed. The first upload
 of a new version validates the trusted publisher connection.
 
-For recovery, open Actions → Release → Run workflow on main and supply an existing
+If dispatch fails after merging, run Release manually on main with publish_tag
+blank to finish creating the release. To retry an npm upload, open
+Actions → Release → Run workflow on main and supply an existing
 numeric GitHub release tag in publish_tag. The job checks the release and version
 and skips an already published npm version only when its registry integrity matches
 the archive packed from that tag. A mismatch fails for investigation; immutable
