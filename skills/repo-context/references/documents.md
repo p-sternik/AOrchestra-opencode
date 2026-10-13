@@ -2,6 +2,15 @@
 
 Prefer the repository's established paths. With no convention, use `docs/agent-context/`. The index remains `repo-map.md`; the rest are on-demand explanations. Root AGENTS.md contains the route to the index, not a second architecture manual.
 
+Adapt scope to the evidence. In a greenfield repository, record the available manifests,
+instructions and requested intent; mark unimplemented modules, flows and checks unknown.
+For brownfield or legacy code, trace existing consumers and compatibility tests before
+describing a boundary; conflicting comments and implementations stay visible. In a
+monorepo, identify workspace manifests and nested AGENTS.md, then map the requested
+packages and confirmed cross-package consumers. A directory name alone proves neither
+ownership nor a dependency. Use native search/LSP for relationships; do not add a
+framework parser or graph engine without a reproducible gap in those tools.
+
 ## Index: repo-map.md
 
 State scope, last verified date/revision, dirty-tree caveat and coverage in a compact provenance paragraph. Then provide a navigation table:
@@ -44,4 +53,4 @@ Use implementation and observed runtime behavior for what the system does, tests
 
 [Evaluating AGENTS.md](https://arxiv.org/abs/2602.11988) found negative effects from unnecessary context requirements in the tested settings. It motivates keeping always-loaded policy short; it does not prove that every map or project-specific instruction hurts performance.
 
-[OpenCode skills](https://opencode.ai/v2/docs/skills) loads SKILL.md and supporting references on demand. Existing native read, grep, glob and LSP are sufficient to start; richer parsers are an optional optimization.
+[OpenCode skills](https://opencode.ai/v2/docs/skills) loads SKILL.md and supporting references on demand. Use existing native read, grep, glob and LSP to confirm semantic relationships.

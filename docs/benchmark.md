@@ -127,6 +127,10 @@ and stopping criteria before inference; every attempted run, including failures,
 timeouts and interruptions, remains in the report. Do not silently retry or drop
 unfavorable trials. Run each harness revision with matched settings when evaluating
 a candidate change; DIRECT vs SELECTIVE alone is not a revision comparison.
+Use the improvement skill's [revision comparison procedure](../skills/improve/references/experiments.md)
+to freeze both revisions, run a separate smoke for each, review matched conditions
+and record ADOPT, REJECT or INCONCLUSIVE with a rollback target. The runner compares
+strategies within one checkout; cross-revision matching and decisions require review.
 
 ## Measurements and limitations
 

@@ -67,6 +67,10 @@ insufficient observations, explain what to collect rather than inventing an
 optimization. Read [references/experiments.md](references/experiments.md) when
 defining validation for a behavior or instruction change.
 
+For an experiment review, return ADOPT, REJECT or INCONCLUSIVE against the predefined
+criteria, with evidence coverage and rollback guidance from the experiment reference.
+An untested proposal remains INCONCLUSIVE about effectiveness.
+
 Finish with data coverage, proposals and remaining gaps. Do not modify harness
 code, instructions, permissions or model policy. Do not run paid evaluation or
 create an experiment registry as part of this skill. Proposals require separate
