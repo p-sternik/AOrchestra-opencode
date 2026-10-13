@@ -12,7 +12,7 @@ import re
 import subprocess
 import sys
 import tempfile
-from urllib.parse import unquote
+from urllib.parse import quote, unquote
 
 EXCLUDED = {'.git', '.opencode', '.agents', '.claude', 'node_modules', '.venv', 'venv', '__pycache__', 'vendor', '.cache'}
 SOURCE_EXTENSIONS = {'.py', '.ts', '.tsx', '.js', '.jsx', '.mjs', '.go', '.rs', '.java', '.cs', '.rb', '.php', '.cpp', '.c', '.h', '.kt', '.swift', '.sql'}
@@ -34,7 +34,7 @@ def target(root, value):
     if path.is_absolute() or re.match(r'^[A-Za-z]:[\\/]', value) or '..' in path.parts:
         raise ValueError('Expected a repository-relative path')
     resolved = (root / path).resolve()
-    if not within(root, resolved) or sensitive(path):
+    if not within(root, resolved) or sensitive(path) or sensitive(resolved.relative_to(root)):
         raise ValueError('Path leaves repository or is sensitive')
     return resolved
 
@@ -212,15 +212,20 @@ def check(root, args):
     documents = []
     if directory.exists():
         for document in directory.rglob('*.md'):
-            if not document.is_symlink() and within(root, document.resolve()):
+            if (not document.is_symlink() and within(root, document.resolve())
+                    and not sensitive(document.relative_to(root))
+                    and not sensitive(document.resolve().relative_to(root))):
                 documents.append(document)
+    untracked = sorted(document.relative_to(root).as_posix() for document in documents
+                       if document.relative_to(root).as_posix() not in state['documents'])
     for name in ['AGENTS.md', 'agents.md']:
         document = root / name
         if document.is_file() and not document.is_symlink() and document not in documents:
             documents.append(document)
     for document in documents:
         issues.extend(local_links(root, document))
-    print(json.dumps({'recorded_documents': len(state['documents']), 'freshness': 'tracked' if state['documents'] else 'untracked', 'checked_link_documents': len(documents), 'issues': issues,
+    freshness = ('partial' if untracked else 'tracked') if state['documents'] else 'untracked'
+    print(json.dumps({'recorded_documents': len(state['documents']), 'freshness': freshness, 'untracked_documents': untracked, 'checked_link_documents': len(documents), 'issues': issues,
                       'limits': 'hashes and local inline link targets only; no semantic, anchor or external-URL verification'}, indent=2, ensure_ascii=False))
     return 1 if issues else 0
 
@@ -240,7 +245,7 @@ def update_agents(root, args):
     newline = '\r\n' if '\r\n' in original else '\n'
     if original.count(START) != original.count(END) or original.count(START) > 1:
         raise ValueError('Malformed or duplicate managed navigation block')
-    pointer = Path(os.path.relpath(map_path, path.parent)).as_posix()
+    pointer = quote(Path(os.path.relpath(map_path, path.parent)).as_posix(), safe='/.-_~')
     heading = '## Nawigacja po repozytorium' if args.language == 'pl' else '## Repository navigation'
     guidance = (f'Przy pracy w nieznanym obszarze lub zmianie między modułami zacznij od [mapy repozytorium]({pointer}). Czytaj tylko powiązane opisy modułu, przepływu i weryfikacji, a następnie sprawdź ich źródła w aktualnym kodzie.' if args.language == 'pl' else
                 f'For an unfamiliar area or a cross-module change, start with [the repository map]({pointer}). Read only the relevant linked module/flow and verification notes, then confirm their source references in current code.')

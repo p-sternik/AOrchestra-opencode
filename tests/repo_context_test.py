@@ -20,6 +20,13 @@ class RepoContextTest(unittest.TestCase):
         self.temporary.cleanup()
     def run_helper(self, mode, *args):
         return subprocess.run([sys.executable, str(SCRIPT), mode, '--root', str(self.root), *args], capture_output=True, text=True)
+    def make_symlink(self, path, target, directory=False):
+        try:
+            path.symlink_to(target, target_is_directory=directory)
+        except OSError as error:
+            if getattr(error, 'winerror', None) == 1314:
+                self.skipTest('Windows account lacks symlink privilege')
+            raise
     def test_agents_preserves_authored_bytes_and_is_idempotent(self):
         path = self.root / 'AGENTS.md'
         authored = b'# Existing policy\r\n\r\nUse only approved staging commands.\r\n'
@@ -101,6 +108,70 @@ class RepoContextTest(unittest.TestCase):
     def test_missing_provenance_is_not_reported_as_tracked_freshness(self):
         result = self.run_helper('check')
         self.assertEqual(json.loads(result.stdout)['freshness'], 'untracked')
+
+    def test_resolved_sensitive_sources_are_rejected(self):
+        secret = self.root / '.env.private'
+        secret.write_text('def private_token(): pass\n', encoding='utf-8')
+        self.make_symlink(self.root / 'src/alias.py', secret)
+        result = self.run_helper('record', '--document', 'docs/agent-context/repo-map.md', '--source', 'src/alias.py')
+        self.assertEqual(result.returncode, 2)
+
+    def test_sensitive_directory_alias_is_rejected(self):
+        secret = self.root / '.aws'
+        secret.mkdir()
+        (secret / 'private.py').write_text('def private_token(): pass\n', encoding='utf-8')
+        self.make_symlink(self.root / 'src/alias', secret, directory=True)
+        spec = importlib.util.spec_from_file_location('repo_context', SCRIPT)
+        helper = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(helper)
+        with self.assertRaises(ValueError):
+            helper.target(self.root, 'src/alias/private.py')
+
+    def test_nested_navigation_with_spaces_preserves_policy_and_valid_links(self):
+        path = self.root / 'src/AGENTS.md'
+        authored = '# Module policy\nPreserve legacy API.\n'
+        path.write_text(authored, encoding='utf-8')
+        document = self.root / 'docs/agent-context/repo map.md'
+        document.write_text('# Map\n', encoding='utf-8')
+        args = ('--agents-path', 'src/AGENTS.md', '--map', 'docs/agent-context/repo map.md')
+        self.assertEqual(self.run_helper('agents', *args).returncode, 0)
+        first = path.read_text(encoding='utf-8')
+        self.assertTrue(first.startswith(authored))
+        self.assertIn('(../docs/agent-context/repo%20map.md)', first)
+        self.assertEqual(self.run_helper('agents', *args).returncode, 0)
+        self.assertEqual(first, path.read_text(encoding='utf-8'))
+
+    def test_unrecorded_documents_remain_visible_with_partial_provenance(self):
+        self.run_helper('record', '--document', 'docs/agent-context/repo-map.md', '--source', 'src/api.py')
+        (self.root / 'docs/agent-context/new-module.md').write_text('# Unverified\n', encoding='utf-8')
+        result = self.run_helper('check')
+        data = json.loads(result.stdout)
+        self.assertEqual(data['freshness'], 'partial')
+        self.assertIn('docs/agent-context/new-module.md', data['untracked_documents'])
+
+    def test_index_bounds_and_unknown_symbols(self):
+        (self.root / 'src/api.py').write_text('not valid python !', encoding='utf-8')
+        data = json.loads(self.run_helper('index', '--focus', 'api', '--limit', '1').stdout)
+        self.assertEqual(len(data['selected_files']), 1)
+        self.assertEqual(data['selected_files'][0]['symbols_kind'], 'unparsed')
+        self.assertEqual(data['selected_files'][0]['symbols'], [])
+        data = json.loads(self.run_helper('index', '--limit', '1', '--max-bytes', '1').stdout)
+        self.assertEqual(data['selected_files'], [])
+        self.assertEqual(data['unread'][0]['reason'], 'file-size limit')
+
+    def test_scoped_refresh_preserves_other_document_provenance(self):
+        second = 'docs/agent-context/other.md'
+        (self.root / second).write_text('# Other\n', encoding='utf-8')
+        (self.root / 'other.py').write_text('def other(): pass\n', encoding='utf-8')
+        self.run_helper('record', '--document', second, '--source', 'other.py')
+        state_path = self.root / 'docs/agent-context/.state.json'
+        prior = json.loads(state_path.read_text())['documents'][second]
+        self.run_helper('record', '--document', 'docs/agent-context/repo-map.md', '--source', 'src/api.py', '--scope', 'src')
+        (self.root / 'other.py').write_text('def changed(): pass\n', encoding='utf-8')
+        self.run_helper('record', '--document', 'docs/agent-context/repo-map.md', '--source', 'src/api.py', '--scope', 'src')
+        self.assertEqual(json.loads(state_path.read_text())['documents'][second], prior)
+        issues = json.loads(self.run_helper('check').stdout)['issues']
+        self.assertEqual({issue['document'] for issue in issues}, {second})
 
 if __name__ == '__main__':
     unittest.main(verbosity=2)

@@ -171,7 +171,8 @@ try {
   if (
     status.version !== loadedVersion ||
     status.availableVersion !== null ||
-    status.installedVersion !== null
+    status.installedVersion !== null ||
+    status.updateError !== undefined
   )
     throw new Error('NATIVE_VERSION_STATUS_MISMATCH');
   const expectedSkills = BUNDLED_SKILLS.map((skill) => ({

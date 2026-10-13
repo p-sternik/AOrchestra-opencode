@@ -1,13 +1,23 @@
-import { expect, test } from 'bun:test';
-import { checkUpdate, updateOptions, updateInstallation, type Installation } from '../lib/update';
+import { expect, test, spyOn } from 'bun:test';
+import {
+  checkUpdate,
+  installUpdate,
+  startUpdateCheck,
+  updateOptions,
+  updateInstallation,
+  type Installation,
+} from '../lib/update';
 import { assertManagedUpdate, mergeSetup, readConfig } from '../lib/setup';
 import { Flock } from '@opencode/util/flock';
 import { mkdtemp, rm, writeFile, unlink } from 'node:fs/promises';
 import { join } from 'node:path';
+import { EventEmitter } from 'node:events';
+import { PassThrough } from 'node:stream';
+import type { spawn } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import type { Plugin } from '@opencode/plugin';
 import pkg from '../package.json';
-import { versionStatus, type VersionStatus } from '../lib/version-status';
+import { sidebarVersion, versionStatus, type VersionStatus } from '../lib/version-status';
 
 const spec = 'aorchestra-opencode-v2@1.2.3';
 const models = { primary: 'p/main', fast: 'p/fast', balanced: 'p/balanced', strong: 'p/strong' };
@@ -162,7 +172,7 @@ test('check attempts are throttled across restarts including offline and failed 
         throw new Error('failed setup');
       };
     if (mode === 'current') f.latest('1.2.3');
-    const first = await checkUpdate(f.deps).catch(() => undefined);
+    const first = await checkUpdate(f.deps).catch(() => f.state.message);
     expect(f.state.checkedAt).toBe(1000);
     expect((await checkUpdate(f.deps)) === first).toBe(true);
     const previous = f.requests;
@@ -277,8 +287,103 @@ test('failed installation leaves availability visible without claiming a complet
       },
     }),
   ).rejects.toThrow('setup failed');
-  expect(status).toEqual({ version: '1.2.3', availableVersion: '1.2.4', installedVersion: null });
+  expect(status).toEqual({
+    version: '1.2.3',
+    availableVersion: '1.2.4',
+    installedVersion: null,
+    updateError: expect.stringContaining('Run setup manually'),
+  });
   expect(f.state.installedVersion).toBeUndefined();
+  expect(await checkUpdate(f.deps)).toContain('Run setup manually');
+});
+
+test('offline errors survive throttled startup and clear after a successful daily check', async () => {
+  const f = fixture({ autoUpdate: false });
+  const latest = f.deps.latest;
+  f.deps.latest = async () => {
+    throw new Error('offline');
+  };
+  await expect(checkUpdate(f.deps)).rejects.toThrow('offline');
+  expect(f.state.updateError).toContain('Run setup manually');
+  expect(await checkUpdate(f.deps)).toBe(f.state.message);
+  f.deps.latest = latest;
+  f.advance();
+  expect(await checkUpdate(f.deps)).toContain('is available');
+  expect(f.state.updateError).toBeUndefined();
+});
+
+test('startup schedules daily checks and disposal stops both timers and late callbacks', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'aorchestra-update-schedule-'));
+  const names = [
+    'OPENCODE_CONFIG_DIR',
+    'OPENCODE_CONFIG',
+    'OPENCODE_CONFIG_CONTENT',
+    'AORCHESTRA_DISABLE_UPDATE',
+  ];
+  const prior = names.map((name) => process.env[name]);
+  const callbacks: Array<() => Promise<void>> = [];
+  const cleared: unknown[] = [];
+  let checks = 0;
+  const timeout = spyOn(globalThis, 'setTimeout');
+  const recurring = spyOn(globalThis, 'setInterval');
+  const clearTimeoutSpy = spyOn(globalThis, 'clearTimeout');
+  const clearIntervalSpy = spyOn(globalThis, 'clearInterval');
+  let status: ReturnType<typeof startUpdateCheck> | undefined;
+  try {
+    names.forEach((name) => delete process.env[name]);
+    process.env.OPENCODE_CONFIG_DIR = directory;
+    await writeFile(
+      join(directory, 'opencode.json'),
+      JSON.stringify({ plugins: [`${pkg.name}@${pkg.version}`] }),
+    );
+    // Restore real timers before running callbacks so native locking uses its own timers.
+    timeout.mockImplementation(((callback: () => Promise<void>) => {
+      callbacks.push(callback);
+      return 101;
+    }) as any);
+    recurring.mockImplementation(((callback: () => Promise<void>, delay: number) => {
+      expect(delay).toBe(86400000);
+      callbacks.push(callback);
+      return { unref() {} };
+    }) as any);
+    status = startUpdateCheck({
+      options: {},
+      plugin: {
+        list: async () => {
+          checks++;
+          return { data: [] };
+        },
+      },
+    } as unknown as Plugin.Context);
+    timeout.mockRestore();
+    recurring.mockRestore();
+    expect(callbacks).toHaveLength(2);
+    await callbacks[0]();
+    await callbacks[1]();
+    expect(checks).toBe(2);
+    await Promise.all([callbacks[1](), callbacks[1]()]);
+    expect(checks).toBe(3);
+    clearTimeoutSpy.mockImplementation(((timer: unknown) => {
+      cleared.push(timer);
+    }) as any);
+    clearIntervalSpy.mockImplementation(((timer: unknown) => {
+      cleared.push(timer);
+    }) as any);
+    status.stop();
+    expect(cleared).toHaveLength(2);
+    await callbacks[1]();
+    expect(checks).toBe(3);
+  } finally {
+    timeout.mockRestore();
+    recurring.mockRestore();
+    clearTimeoutSpy.mockRestore();
+    clearIntervalSpy.mockRestore();
+    names.forEach((name, i) => {
+      if (prior[i] === undefined) delete process.env[name];
+      else process.env[name] = prior[i];
+    });
+    await rm(directory, { recursive: true, force: true });
+  }
 });
 
 test('global JSONC discovery requires the matching active native package and rejects duplicate or local registrations', async () => {
@@ -317,5 +422,228 @@ test('global JSONC discovery requires the matching active native package and rej
     await expect(updateInstallation(directory, ctx)).rejects.toThrow('INVALID_GLOBAL_CONFIG');
   } finally {
     await rm(directory, { recursive: true, force: true });
+  }
+});
+
+async function withUpdater(
+  run: (
+    f: ReturnType<typeof fixture>,
+    callbacks: Array<() => Promise<void>>,
+    logs: string[],
+    start: () => ReturnType<typeof startUpdateCheck>,
+  ) => Promise<void>,
+) {
+  const names = ['OPENCODE_CONFIG', 'OPENCODE_CONFIG_CONTENT', 'AORCHESTRA_DISABLE_UPDATE'];
+  const prior = names.map((name) => process.env[name]);
+  const callbacks: Array<() => Promise<void>> = [];
+  const logs: string[] = [];
+  const timeout = spyOn(globalThis, 'setTimeout');
+  const recurring = spyOn(globalThis, 'setInterval');
+  const lock = spyOn(Flock, 'withLock');
+  const log = spyOn(console, 'error');
+  const statuses: Array<ReturnType<typeof startUpdateCheck>> = [];
+  try {
+    names.forEach((name) => delete process.env[name]);
+    timeout.mockImplementation(((callback: () => Promise<void>, delay: number) => {
+      expect(delay).toBe(0);
+      callbacks.push(callback);
+      return 101;
+    }) as any);
+    recurring.mockImplementation(((callback: () => Promise<void>, delay: number) => {
+      expect(delay).toBe(86400000);
+      callbacks.push(callback);
+      return { unref() {} };
+    }) as any);
+    lock.mockImplementation(async (_key, fn) => fn());
+    log.mockImplementation((message) => {
+      logs.push(String(message));
+    });
+    const f = fixture();
+    f.deps.version = pkg.version;
+    f.config.plugins[0].package = `${pkg.name}@${pkg.version}`;
+    f.config.plugins[0].options.updateManagedPackage = `${pkg.name}@${pkg.version}`;
+    f.latest(
+      `${pkg.version.split('.').slice(0, 2).join('.')}.${Number(pkg.version.split('.')[2]) + 1}`,
+    );
+    const start = () => {
+      const status = startUpdateCheck(
+        {
+          options: {},
+          storage: { get: f.deps.get, set: (_key: string, state: any) => f.deps.set(state) },
+        } as unknown as Plugin.Context,
+        f.deps,
+      );
+      statuses.push(status);
+      return status;
+    };
+    await run(f, callbacks, logs, start);
+  } finally {
+    statuses.forEach((status) => status.stop());
+    timeout.mockRestore();
+    recurring.mockRestore();
+    lock.mockRestore();
+    log.mockRestore();
+    names.forEach((name, i) => {
+      if (prior[i] === undefined) delete process.env[name];
+      else process.env[name] = prior[i];
+    });
+  }
+}
+
+test('registry and installation causes reach server diagnostics while RPC/TUI remain generic', async () => {
+  for (const phase of ['registry', 'installation', 'configuration', 'locking']) {
+    await withUpdater(async (f, callbacks, logs, start) => {
+      const failure = new Error(
+        `${phase === 'installation' ? 'AUTO_UPDATE_CONFIG_CHANGED: ' : ''}secret-token https://user:password@example.test/?token=secret config=private`,
+        {
+          cause: Object.assign(new Error('private environment contents'), { code: 'EACCES' }),
+        },
+      );
+      if (phase === 'registry')
+        f.deps.latest = async () => {
+          throw failure;
+        };
+      if (phase === 'installation')
+        f.deps.install = async () => {
+          throw failure;
+        };
+      if (phase === 'configuration')
+        f.deps.load = async () => {
+          throw failure;
+        };
+      if (phase === 'locking')
+        spyOn(Flock, 'withLock').mockImplementation(async () => {
+          throw failure;
+        });
+      const status = start();
+      await callbacks[0]();
+      expect(logs.at(-1)).toBe(
+        `AOrchestra automatic update failed (${phase}): ${phase === 'installation' ? 'AUTO_UPDATE_CONFIG_CHANGED, ' : ''}EACCES`,
+      );
+      expect(status.info.updateError).toContain('Run setup manually');
+      expect(sidebarVersion(status.info).update).toBe('Update failed · run setup manually');
+      for (const secret of ['secret-token', 'password', 'private', 'example.test', 'EACCES'])
+        expect(JSON.stringify(status.info)).not.toContain(secret);
+      expect(logs.join(' ')).not.toContain('secret-token');
+      expect(logs.join(' ')).not.toContain('private');
+      expect(logs.join(' ')).not.toContain('password');
+    });
+  }
+});
+
+test('registry HTTP status is logged and successful subsequent checks clear public errors', async () => {
+  await withUpdater(async (f, callbacks, logs, start) => {
+    f.deps.latest = async () => {
+      throw new Error('AUTO_UPDATE_REGISTRY_UNAVAILABLE: HTTP 503');
+    };
+    const status = start();
+    await callbacks[0]();
+    expect(logs.at(-1)).toContain('registry): AUTO_UPDATE_REGISTRY_UNAVAILABLE, HTTP 503');
+    expect(f.state.updateError).toBe(status.info.updateError);
+    await f.deps.set({ ...f.state, checkedAt: 0 });
+    // startUpdateCheck captures the injected dependency functions at startup.
+    status.stop();
+    f.deps.latest = async () => pkg.version;
+    const recovered = start();
+    await callbacks[2]();
+    expect(recovered.info.updateError).toBeUndefined();
+    expect(f.state.updateError).toBeUndefined();
+  });
+});
+
+test('disposal during a registry request suppresses persisted failures, logs and overlapping checks', async () => {
+  await withUpdater(async (f, callbacks, logs, start) => {
+    let reject!: (error: Error) => void;
+    let requests = 0;
+    f.deps.latest = () => {
+      requests++;
+      return new Promise((_resolve, fail) => {
+        reject = fail;
+      });
+    };
+    const status = start();
+    const pending = callbacks[0]();
+    while (!reject) await Promise.resolve();
+    await callbacks[1]();
+    expect(requests).toBe(1);
+    status.stop();
+    reject(new Error('aborted secret'));
+    await pending;
+    await callbacks[1]();
+    expect(requests).toBe(1);
+    expect(status.info.updateError).toBeUndefined();
+    expect(f.state.updateError).toBeUndefined();
+    expect(logs).toEqual([]);
+  });
+});
+
+test('installer drains bounded stderr and retains only failure categories and exit status', async () => {
+  for (const code of [0, 1, null]) {
+    const child = Object.assign(new EventEmitter(), { stderr: new PassThrough() });
+    const spawnWorker = ((_command: string, _args: string[], options: any) => {
+      expect(options.stdio).toEqual(['ignore', 'ignore', 'pipe']);
+      expect(options.detached).toBe(process.platform !== 'win32');
+      return child;
+    }) as unknown as typeof spawn;
+    const pending = installUpdate('1.2.4', spec, '/unused-controlled-config', spawnWorker);
+    child.stderr.write(
+      'secret-token ' +
+        'x'.repeat(20000) +
+        '\nAUTO_UPDATE_CONFIG_CHANGED: token=private password=secret\n',
+    );
+    child.emit('close', code, code === null ? 'SIGTERM' : null);
+    if (code === 0) await pending;
+    else {
+      const error = await pending.catch((error: Error) => error);
+      expect(error).toBeInstanceOf(Error);
+      expect((error as Error).message).toContain(`AUTO_UPDATE_SETUP_FAILED: exit ${code}`);
+      expect((error as Error).message).toContain('AUTO_UPDATE_CONFIG_CHANGED');
+      expect((error as Error).message).not.toContain('private');
+      expect((error as Error).message.length).toBeLessThan(200);
+    }
+    child.stderr.destroy();
+  }
+});
+
+test('installer spawn errors and the fifteen-minute deadline retain rejection and timer cleanup', async () => {
+  const timeout = spyOn(globalThis, 'setTimeout');
+  const clear = spyOn(globalThis, 'clearTimeout');
+  const kill = spyOn(process, 'kill');
+  let expire!: () => void;
+  try {
+    timeout.mockImplementation(((callback: () => void, delay: number) => {
+      expect(delay).toBe(15 * 60 * 1000);
+      expire = callback;
+      return 123;
+    }) as any);
+    clear.mockImplementation(() => {});
+    kill.mockImplementation(() => true);
+    for (const mode of ['spawn', 'timeout']) {
+      const child = Object.assign(new EventEmitter(), {
+        stderr: new PassThrough(),
+        // Windows tree termination remains a native integration limitation.
+        pid: process.platform === 'win32' ? undefined : 42,
+      });
+      const spawnWorker = (() => child) as unknown as typeof spawn;
+      const pending = installUpdate('1.2.4', spec, '/unused-controlled-config', spawnWorker);
+      if (mode === 'spawn') {
+        const error = Object.assign(new Error('private spawn details'), { code: 'ENOENT' });
+        child.emit('error', error);
+        expect(await pending.catch((error) => error)).toBe(error);
+        expect(clear).toHaveBeenCalledWith(123);
+      } else {
+        child.stderr.write('NpmInstallFailedError: private token=secret');
+        expire();
+        await expect(pending).rejects.toThrow('AUTO_UPDATE_TIMEOUT: NpmInstallFailedError');
+        if (process.platform !== 'win32') expect(kill).toHaveBeenCalledWith(-42, 'SIGTERM');
+      }
+      child.emit('close', 1, null);
+      expect(clear).toHaveBeenCalledWith(123);
+      child.stderr.destroy();
+    }
+  } finally {
+    timeout.mockRestore();
+    clear.mockRestore();
+    kill.mockRestore();
   }
 });

@@ -20,6 +20,12 @@ When an existing equivalent pointer exists outside the managed block, update it 
 
 The optional registry `docs/agent-context/.state.json` stores document hashes, source hashes, relevant directory inventories, revision and verification time. Record a document after checking its content and sources. With no registry, `check` reports freshness as untracked; working links alone do not establish freshness.
 
+`check` lists unrecorded Markdown documents under the selected docs directory as
+`untracked_documents` and reports `partial` freshness when recorded and unrecorded
+documents coexist. Exit zero means no detected hash/link issue; it does not mean
+complete provenance or semantic verification. Root AGENTS.md is checked for links
+without requiring a provenance record. Review nested policy files explicitly.
+
 Examples:
 
 ```text
@@ -30,6 +36,14 @@ python <skill-dir>/scripts/repo_context.py check --root <repo>
 ```
 
 The inventory respects Git ignored files when available. It does not assume every directory named build/dist/coverage is generated. Explicit `--exclude` paths narrow the candidate inventory and show examples of omitted files. Scopes are optional: choose only directories whose additions matter to the documented area.
+
+The index defaults to 100 files, 30 symbols per file and 256 KiB per inspected file;
+`--focus` ranks paths, not semantic relevance. Oversized files remain visibly unread.
+Known secret filenames/directories and aliases resolving to them are rejected, but
+filename filtering cannot detect credentials embedded in ordinary source. Review
+the selected paths and use `--exclude` for confirmed generated or sensitive content.
+Index exclusions do not carry into recorded scope inventories: choose narrower
+scopes or Git ignore rules when those inventories would include generated artifacts.
 
 `record` accepts a custom `--docs-dir` for existing layouts. For an established provenance mechanism, use that one. Check no unresolved stale source, removed symbol or invalid local link remains hidden by a generic “verified” label. External URLs and heading anchors need manual checks when their validity matters; the helper validates local file targets only.
 

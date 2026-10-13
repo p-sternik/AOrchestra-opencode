@@ -56,6 +56,48 @@ const template = {
   },
 };
 const models = { primary: 'p/main', fast: 'p/fast', balanced: 'p/main', strong: 'p/strong' };
+test('global setup embeds the self-contained group contract and complete agent instructions', async () => {
+  // Mirror CLI setup: inline installed instruction files before merging global config.
+  const embedded = structuredClone(shippedTemplate);
+  for (const id of ['aorchestra', 'aorchestra-executor'] as const) {
+    embedded.agents[id].system = await readFile(
+      new URL(`../instructions/${id}.md`, import.meta.url),
+      'utf8',
+    );
+  }
+  const before = '// retained\n{"default_agent":"build","agents":{"aorchestra":{"steps":17}}}';
+  const spec = 'aorchestra-opencode-v2@1.2.3';
+  const after = mergeSetup(before, embedded, spec, models);
+  const config = readConfig(after);
+  for (const id of ['aorchestra', 'aorchestra-executor'] as const) {
+    expect(config.agents[id].system).toBe(embedded.agents[id].system);
+    expect(config.agents[id].system).not.toMatch(/\{file:|\.\.\/docs\//);
+  }
+  const primary = config.agents.aorchestra.system;
+  for (const contract of [
+    'call `aorchestra_delegate` with a `tasks` array',
+    'at least two distinct registered, independent `kind: analysis` task IDs with empty `writePaths`',
+    'Each item supplies `taskId`, `model`, `tools` and `routingEvidence`',
+    'each task needs its own `handoff` (registered or supplied on its item) and verifiers',
+    'Do not combine `tasks` with top-level single-task delegation fields',
+    'fit available `maxConcurrentAnalyses` slots and delegation/attempt budgets',
+    'admission is atomic before children are created',
+    'invalid or oversized groups create no children and spend no budget',
+    'There is no queue',
+    'Each analysis still requires fresh primary checks and separate acceptance with\ncompatibility review',
+    'A group result never accepts its tasks',
+  ]) {
+    expect(primary).toContain(contract);
+  }
+  expect(after).toContain('// retained');
+  expect(config.default_agent).toBe('build');
+  expect(config.agents.aorchestra.steps).toBe(17);
+  expect(config.agents.aorchestra.model).toBe(models.primary);
+  expect(config.agents.aorchestra.permissions).toEqual(
+    shippedTemplate.agents.aorchestra.permissions,
+  );
+  expect(mergeSetup(after, embedded, spec, models)).toBe(after);
+});
 test('stable setup pins the CLI version without Git; main pins a validated commit', async () => {
   let calls = 0;
   const revision = async () => {

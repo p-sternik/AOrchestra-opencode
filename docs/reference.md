@@ -34,8 +34,11 @@ the package without changing the marker creates a manual pin. `autoUpdate: false
 means notification only; `updateCheck: false` disables checks. Both options must
 be booleans. Local/project options can disable automatic installation as well.
 
-Startup schedules work after plugin registration; it does not wait for the network
-or call a model. Global JSON/JSONC discovery uses the native global paths and
+Startup schedules work after plugin registration and repeats it every 24 hours
+while the plugin remains loaded; it does not wait for the network or call a model.
+Checks never overlap within one plugin instance, and disposal cancels both timers.
+After installation succeeds, further checks wait for an OpenCode restart.
+Global JSON/JSONC discovery uses the native global paths and
 `OPENCODE_CONFIG_DIR`. Multiple AOrchestra registrations, Git/local sources,
 prerelease versions, explicit config/content overrides and mismatched active native
 package metadata skip checks. This prevents a checkout from updating a global
@@ -63,7 +66,11 @@ Notifications are written to the server log and added to the next AOrchestra
 primary context, and version/update status appears in the TUI sidebar footer.
 They do not reload a running plugin/session: restart OpenCode
 after success. Network/install/check failures leave execution available and do
-not trigger an immediate retry. A failed post-install check can leave the backed-up
+not trigger an immediate retry. Network/install failures persist an error alongside
+the daily attempt and show `Update failed · run setup manually` in the sidebar,
+including during throttled startup. A successful later check clears that error.
+Installer stderr is retained in the server log for diagnosis.
+A failed post-install check can leave the backed-up
 configuration change visible, as in manual setup; inspect the backup and rerun
 setup manually. There is no automatic rollback. This feature has no provider
 inference or semantic-effectiveness claim.
@@ -74,7 +81,8 @@ The package exposes a native `./tui` entrypoint; local directory discovery uses
 `v<version> installed · restart required`. It reads the location-scoped
 `aorchestra.status.get` RPC from the active server plugin, rather than assuming
 the TUI bundle and server have the same version. The read-only RPC returns
-`version`, nullable `availableVersion` and nullable `installedVersion`.
+`version`, nullable `availableVersion`, nullable `installedVersion` and an optional
+`updateError` message. The error field is absent when no update failure is recorded.
 
 The sidebar refreshes every ten seconds while mounted, cancels requests when its
 session/location changes or it is disposed, and ignores late responses. An
@@ -554,6 +562,11 @@ The private database does not copy credentials from the normal native database;
 configure provider access through the native configuration/environment for this
 opt-in run. Project and global configuration discovery otherwise remains native.
 
+The provider-backed smoke is an infrastructure readiness gate under matching
+harness source and resolved settings, not validation of the benchmark's selected
+cases or split. It requires at least one verified success per strategy; metric
+completeness remains a separate check. See the [smoke contract](benchmark.md#matched-execution).
+
 The runner reads the unique native root session from that attempt's database and
 cross-checks any session IDs emitted by the CLI. It uses exact session/run IDs,
 checks native child ownership against telemetry and rejects multiple primary
@@ -570,6 +583,9 @@ issues, and per-strategy comparisons. In v2, `durationMs` measures CLI wall time
 including native startup, and excludes reconciliation and independent assertions.
 `report.md` presents strategy summaries, category coverage, per-trial outcomes and
 matched per-case variability. Protocols pair cases/repetitions and alternate order.
+Agent `changedPaths` and `scopePassed` are frozen before independent checks;
+`independentCheckChangedPaths` separately records their net workspace mutations.
+Older reports without that optional field have unknown test-mutation coverage.
 DIRECT sessions deny delegation through native permissions before CLI continuation;
 SELECTIVE retains resolved permissions. Source/settings fingerprints reject drift.
 DIRECT attempts that delegate are

@@ -161,6 +161,8 @@ CLI version; a version mismatch fails before saving global config. The package
 name is `aorchestra-opencode-v2`. A main-channel update uses the GitHub command above.
 
 Stable setup enables automatic updates in releases containing this feature.
+Checks run at startup and every 24 hours while OpenCode stays open. Failures appear
+in the sidebar as `Update failed · run setup manually`; details are in the server log.
 Existing installations need setup once from such a release to enable it. On
 startup, the installed plugin checks npm in the background, with a 24-hour
 interval recorded in native plugin storage. New stable releases within the same

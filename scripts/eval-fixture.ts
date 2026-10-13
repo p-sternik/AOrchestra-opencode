@@ -1,6 +1,7 @@
 import { mkdir, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { spawn } from 'node:child_process';
+import { snapshot, changedPaths } from '../lib/files';
 
 export type EvaluationCase = {
   id: string;
@@ -103,6 +104,28 @@ export async function regressionCheck(cwd: string, files: Record<string, string>
   };
 }
 
+export async function checkFixture(
+  cwd: string,
+  fixture: EvaluationCase,
+  before: Record<string, string>,
+) {
+  // Freeze the agent's changes before runner-owned checks can mutate the workspace.
+  const afterAgent = await snapshot(cwd);
+  const changes = changedPaths(before, afterAgent);
+  const checks = await independentCheck(cwd, fixture.assertions);
+  const regressions = await regressionCheck(cwd, fixture.files);
+  return {
+    checks,
+    regressions,
+    changes,
+    scoped: changes.every((path) => fixture.allowedChanges.includes(path)),
+    independentCheckChangedPaths: changedPaths(afterAgent, await snapshot(cwd)),
+  };
+}
+
+// Infrastructure readiness only: at least one verified attempt per protocol under
+// matching source/settings. Case IDs, corpus hashes and splits need not match the
+// benchmark; this gate establishes neither corpus coverage nor usage completeness.
 export function smokeCompatible(
   report: unknown,
   settingsFingerprint: string,
