@@ -49,6 +49,7 @@ test('native sidebar slot renders server version and update states, then cancels
     let location: any;
     const ctx = {
       theme: { text: { muted: '#999999' } },
+      keymap: { layer: () => {} },
       data: { session: { get: () => ({ location: { directory: '/server/project' } }) } },
       client: {
         rpc: () => ({
@@ -99,6 +100,7 @@ test('unavailable server status does not label the TUI bundle as the running plu
   let claim: any;
   const ctx = {
     theme: { text: { muted: '#999999' } },
+    keymap: { layer: () => {} },
     data: { session: { get: () => ({ location: { directory: '/project' } }) } },
     client: {
       rpc: () => ({
@@ -134,6 +136,7 @@ test('switching sessions cancels the previous request and ignores its late versi
   const requests: Array<{ signal: AbortSignal; resolve: (value: VersionStatus) => void }> = [];
   const ctx = {
     theme: { text: { muted: '#999999' } },
+    keymap: { layer: () => {} },
     data: { session: { get: (id: string) => ({ location: { directory: `/projects/${id}` } }) } },
     client: {
       rpc: () => ({
@@ -175,5 +178,108 @@ test('switching sessions cancels the previous request and ignores its late versi
   } finally {
     view.renderer.destroy();
     if (cleanup) await cleanup();
+  }
+});
+
+test('first-launch model picker configures the chosen model without a model call, and cancellation preserves setup', async () => {
+  for (const selected of [undefined, 'p/main']) {
+    const calls: unknown[] = [],
+      alerts: string[] = [];
+    let claim: any;
+    let layer: any;
+    const pending = { state: 'needs-model', models: ['p/main'], message: 'Choose a model.' };
+    const ctx = {
+      theme: { text: { muted: '#999999' } },
+      location: { directory: '/project' },
+      keymap: {
+        layer: (callback: any) => {
+          layer = callback();
+        },
+      },
+      client: {
+        rpc: () => ({
+          get: async () => pending,
+          configure: async (input: unknown) => {
+            calls.push(input);
+            return {
+              state: 'restart-required',
+              models: [],
+              message: 'Setup passed. Restart OpenCode.',
+            };
+          },
+        }),
+      },
+      ui: {
+        slot: (value: any) => {
+          claim = value;
+          return () => {};
+        },
+        dialog: {
+          select: async (input: any) => {
+            expect(input.options).toEqual([{ title: 'p/main', value: 'p/main' }]);
+            return selected;
+          },
+          alert: async (input: any) => {
+            alerts.push(input.message);
+          },
+        },
+      },
+    } as unknown as Plugin.Context;
+    const { setupOnboardingUI } = await import('../plugins/aorchestra-tui');
+    const cleanup = setupOnboardingUI(ctx);
+    expect(layer.commands[0].slash.name).toBe('aorchestra-setup');
+    expect(claim.append).toBe('home.footer');
+    const view = await testRender(() => claim.render({}), { width: 80, height: 8 });
+    try {
+      await view.waitForFrame((frame) => frame.includes('Choose a model.'));
+      expect(calls).toEqual(selected ? [{ model: selected }] : []);
+      expect(alerts).toEqual(selected ? ['Setup passed. Restart OpenCode.'] : []);
+    } finally {
+      view.renderer.destroy();
+      cleanup();
+    }
+  }
+});
+
+test('setup command retries provider discovery and reports authentication gaps without writing', async () => {
+  let layer: any;
+  const requests: unknown[] = [],
+    alerts: string[] = [];
+  const ctx = {
+    location: { directory: '/project' },
+    keymap: {
+      layer: (callback: any) => {
+        layer = callback();
+      },
+    },
+    client: {
+      rpc: () => ({
+        configure: async (input: unknown) => {
+          requests.push(input);
+          return {
+            state: 'needs-model',
+            models: [],
+            message: 'Authenticate a provider, then retry.',
+          };
+        },
+      }),
+    },
+    ui: {
+      slot: () => () => {},
+      dialog: {
+        alert: async (input: any) => {
+          alerts.push(input.message);
+        },
+      },
+    },
+  } as unknown as Plugin.Context;
+  const { setupOnboardingUI } = await import('../plugins/aorchestra-tui');
+  const cleanup = setupOnboardingUI(ctx);
+  try {
+    await layer.commands[0].run();
+    expect(requests).toEqual([{}]);
+    expect(alerts).toEqual(['Authenticate a provider, then retry.']);
+  } finally {
+    cleanup();
   }
 });

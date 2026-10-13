@@ -33,7 +33,7 @@ const value = (name: string) =>
   args.find((arg) => arg.startsWith(`--${name}=`))?.slice(name.length + 3);
 if (!operation || args.includes('--help') || operation === 'help') {
   console.log(
-    `AOrchestra ${pkg.version}\n\nUsage: aorchestra setup [--model=provider/model] [--fast=...] [--balanced=...] [--strong=...] [--default] [--channel=stable|main | --package=npm-or-git-spec]\n       aorchestra check [--project=/path]\n       aorchestra report [report options]\n\nRequires Bun and OpenCode ${OPENCODE_RUNTIME_RANGE}. Set OPENCODE_BIN if V2 is not named opencode2.\nSetup preserves global JSONC and makes no model calls. Stable setup pins this CLI version from npm; --channel=main pins a Git commit.`,
+    `AOrchestra ${pkg.version}\n\nUsage: aorchestra setup [--model=provider/model] [--fast=...] [--balanced=...] [--strong=...] [--default] [--channel=stable|main | --package=npm-or-git-spec]\n       aorchestra configure [--model=provider/model] [--package=registered-spec]\n       aorchestra check [--project=/path]\n       aorchestra report [report options]\n\nRequires Bun and OpenCode ${OPENCODE_RUNTIME_RANGE}. Set OPENCODE_BIN if V2 is not named opencode2.\nSetup preserves global JSONC and makes no model calls. Stable setup pins this CLI version from npm; --channel=main pins a Git commit. Configure completes an existing plugin registration without reinstalling.`,
   );
   process.exit(0);
 }
@@ -55,7 +55,10 @@ try {
     );
     process.exit(await child.exited);
   }
-  if (operation !== 'setup') throw new Error('UNKNOWN_COMMAND: use --help');
+  if (operation !== 'setup' && operation !== 'configure')
+    throw new Error('UNKNOWN_COMMAND: use --help');
+  if (operation === 'configure' && (value('channel') || value('update-from')))
+    throw new Error('UNKNOWN_OPTION: configure does not install or switch channels');
   const allowed = new Set([
     'model',
     'fast',
@@ -113,6 +116,7 @@ try {
     const env: NodeJS.ProcessEnv = {
       ...globalEnvironment(process.env),
       AORCHESTRA_DISABLE_UPDATE: '1',
+      AORCHESTRA_DISABLE_SETUP: '1',
     };
     const paths = await command(['debug', 'paths'], neutral, 120000, env);
     const directory = resolve(
@@ -134,9 +138,11 @@ try {
     const configPath = jsoncText !== undefined ? jsonc : json;
     const before = jsoncText ?? jsonText;
     const config = readConfig(before ?? '{}');
+    const lowerConfig =
+      jsoncText !== undefined && jsonText !== undefined ? readConfig(jsonText) : undefined;
     if (updateFrom) assertManagedUpdate(config, updateFrom);
     if (jsonText !== undefined && jsoncText !== undefined) {
-      const lower = readConfig(jsonText);
+      const lower = lowerConfig!;
       const targets =
         lower.plugins?.map((p: any) => (typeof p === 'string' ? p : p?.package)) ?? [];
       if (targets.some((target: any) => typeof target === 'string' && isAOrchestraTarget(target)))
@@ -147,7 +153,11 @@ try {
     // Model discovery needs the user's normal DB because V2 stores credentials there.
     // Only the subsequent smoke check uses a separate test DB.
     const temporary = await privateClient(neutral, env);
-    const prior = config.agents?.aorchestra?.model ?? config.model;
+    const prior =
+      config.agents?.aorchestra?.model ??
+      lowerConfig?.agents?.aorchestra?.model ??
+      config.model ??
+      lowerConfig?.model;
     const configuredTiers = config.plugins?.find(
       (entry: any) => entry && typeof entry === 'object' && isAOrchestraTarget(entry.package ?? ''),
     )?.options?.models;
@@ -157,6 +167,7 @@ try {
     ].filter((model): model is string => typeof model === 'string');
     let available: string[] = [];
     let observedTargets: string[] = [];
+    let configuredVersion: string | undefined;
     try {
       await temporary.client.location.get({ location: { directory: neutral } });
       for (let attempt = 0; attempt < 20; attempt++) {
@@ -166,17 +177,19 @@ try {
         if (available.length && preferred.every((model) => available.includes(model))) break;
         await new Promise((resolve) => setTimeout(resolve, 250));
       }
-      observedTargets = (
+      const loaded = (
         await temporary.client.plugin.list({ location: { directory: neutral } })
-      ).data
-        .filter((plugin) => plugin.id === 'aorchestra')
-        .flatMap((plugin) =>
-          plugin.source.type === 'package'
-            ? [plugin.source.target]
-            : plugin.source.type === 'local'
-              ? [plugin.source.path]
-              : [],
-        );
+      ).data.filter((plugin) => plugin.id === 'aorchestra');
+      const configuredSource = loaded.find((plugin) => plugin.source.type === 'package')?.source;
+      configuredVersion =
+        configuredSource?.type === 'package' ? configuredSource.version : undefined;
+      observedTargets = loaded.flatMap((plugin) =>
+        plugin.source.type === 'package'
+          ? [plugin.source.target]
+          : plugin.source.type === 'local'
+            ? [plugin.source.path]
+            : [],
+      );
     } finally {
       await temporary.close();
     }
@@ -215,14 +228,33 @@ try {
     };
     for (const model of Object.values(models))
       if (!available.includes(model)) throw new Error(`MODEL_NOT_IN_CATALOGUE: ${model}`);
-    console.log('Installing through OpenCode’s native package manager…');
+    if (operation === 'configure') {
+      if (!configuredVersion || !observedTargets.some(isAOrchestraTarget))
+        throw new Error('PLUGIN_REGISTRATION_REQUIRED: run plugin add or setup first');
+      assertSetupVersion(pkg.version, configuredVersion, spec);
+      if (value('package') && !observedTargets.includes(spec))
+        throw new Error(
+          'REGISTERED_PACKAGE_REQUIRED: configure cannot change the installed source',
+        );
+      if (
+        !value('package') &&
+        !observedTargets.some((target) => target === pkg.name || target.startsWith(`${pkg.name}@`))
+      )
+        throw new Error('REGISTERED_PACKAGE_REQUIRED: pass the registered Git spec with --package');
+    }
+    console.log(
+      operation === 'setup'
+        ? 'Installing through OpenCode’s native package manager…'
+        : 'Configuring the registered plugin without reinstalling…',
+    );
     // Let the V2 executable perform installation with its own runtime. Its config
     // write goes to a staging directory; we merge the real JSONC ourselves.
-    await command(['plugin', 'add', spec], neutral, 600_000, {
-      ...env,
-      OPENCODE_CONFIG_DIR: join(neutral, 'install-config'),
-    });
-    const installed = await Npm.resolve(spec);
+    if (operation === 'setup')
+      await command(['plugin', 'add', spec], neutral, 600_000, {
+        ...env,
+        OPENCODE_CONFIG_DIR: join(neutral, 'install-config'),
+      });
+    const installed = operation === 'configure' ? { directory: root } : await Npm.resolve(spec);
     const installedPkg = JSON.parse(
       await readFile(join(installed.directory, 'package.json'), 'utf8'),
     );
@@ -243,11 +275,14 @@ try {
       args.includes('--default'),
       observedTargets,
       value('package') === undefined && value('channel') !== 'main',
+      lowerConfig,
     );
     const permissionUpdate = primaryPermissions(
-      config.agents?.aorchestra?.permissions,
+      readConfig(after).agents.aorchestra.permissions,
       template.agents.aorchestra.permissions,
     );
+    if (lowerConfig && (await read(json)) !== jsonText)
+      throw new Error('CONFIG_CHANGED_DURING_SETUP: retry after reviewing global JSON');
     const saved = await saveConfig(configPath, before, after);
     const updatePolicy = readConfig(after).plugins.find(
       (entry: any) => entry?.package === spec,

@@ -14,17 +14,19 @@ const permissionKey = (rules: unknown) =>
       ? Object.fromEntries(Object.entries(value).sort(([a], [b]) => a.localeCompare(b)))
       : value,
   );
-export function primaryPermissions(
-  prior: unknown,
-  defaults: unknown,
-): { rules: unknown; customized: boolean } {
-  const rules = Array.isArray(prior)
+const normalizedPermissions = (prior: unknown) =>
+  Array.isArray(prior)
     ? prior.map((rule) =>
         rule?.action === 'skill' && rule.resource === 'repo-context' && rule.effect === 'allow'
           ? { ...rule, resource: BUNDLED_SKILL_ID }
           : rule,
       )
     : prior;
+export function primaryPermissions(
+  prior: unknown,
+  defaults: unknown,
+): { rules: unknown; customized: boolean } {
+  const rules = normalizedPermissions(prior);
   if (
     rules === undefined ||
     [legacyPermissions, v050Permissions].some(
@@ -97,6 +99,7 @@ export function mergeSetup(
   makeDefault = false,
   observedTargets: string[] = [],
   managedUpdate?: boolean,
+  lowerConfig: RecordValue = {},
 ): string {
   const existing = readConfig(text);
   const matches = (target: string) =>
@@ -142,9 +145,30 @@ export function mergeSetup(
   };
   set(['plugins'], plugins);
   for (const id of ['aorchestra', 'aorchestra-executor']) {
-    const prior = existing.agents?.[id];
-    if (prior !== undefined && (!prior || typeof prior !== 'object' || Array.isArray(prior)))
-      throw new Error('INVALID_EXISTING_AGENT');
+    const lower = lowerConfig.agents?.[id],
+      upper = existing.agents?.[id];
+    for (const value of [lower, upper])
+      if (value !== undefined && (!value || typeof value !== 'object' || Array.isArray(value)))
+        throw new Error('INVALID_EXISTING_AGENT');
+    const lowerRules = normalizedPermissions(lower?.permissions),
+      upperRules = normalizedPermissions(upper?.permissions);
+    const prior =
+      lower === undefined
+        ? upper
+        : {
+            ...lower,
+            ...upper,
+            // Native config appends ordered permissions from JSON, then JSONC.
+            ...(Array.isArray(lowerRules) && Array.isArray(upperRules)
+              ? {
+                  permissions:
+                    permissionKey(upperRules.slice(0, lowerRules.length)) ===
+                    permissionKey(lowerRules)
+                      ? upperRules
+                      : [...lowerRules, ...upperRules],
+                }
+              : {}),
+          };
     const agent = { ...template.agents[id], ...prior, system: template.agents[id].system };
     if (id === 'aorchestra') agent.model = models.primary;
     if (id === 'aorchestra')
@@ -154,7 +178,11 @@ export function mergeSetup(
       ).rules;
     set(['agents', id], agent);
   }
-  if (makeDefault || existing.default_agent === undefined) set(['default_agent'], 'aorchestra');
+  if (
+    makeDefault ||
+    (existing.default_agent === undefined && lowerConfig.default_agent === undefined)
+  )
+    set(['default_agent'], 'aorchestra');
   return text;
 }
 // Setup pins packages for reproducibility; only its matching marker permits

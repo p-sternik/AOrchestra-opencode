@@ -23,6 +23,7 @@
     "scripts/cli.ts",
     "scripts/update.ts",
     "scripts/check.ts",
+    "scripts/eval-usage.ts",
     "scripts/runtime.ts",
     "scripts/report.ts",
     "instructions",

@@ -1,0 +1,58 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="280" viewBox="0 0 1200 280" role="img" aria-labelledby="title desc">
+  <title id="title">AOrchestra: task-specific agent creation</title>
+  <desc id="desc">When delegation helps, the main agent composes a model, tools, instructions and context into a task contract, creates a scoped native child session, and receives its result for verification and review. The main agent can also work directly.</desc>
+  <defs>
+    <linearGradient id="bg" x2="1" y2="1">
+      <stop stop-color="#0c1729"/>
+      <stop offset="1" stop-color="#182d45"/>
+    </linearGradient>
+    <linearGradient id="accent" x2="1" y2="1">
+      <stop stop-color="#5ce0ce"/>
+      <stop offset="1" stop-color="#76a9fa"/>
+    </linearGradient>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
+      <path d="M0 0L10 5L0 10Z" fill="#789bb9"/>
+    </marker>
+  </defs>
+  <rect width="1200" height="280" rx="18" fill="url(#bg)"/>
+  <g font-family="system-ui, -apple-system, Segoe UI, sans-serif">
+    <text x="40" y="99" font-size="45" font-weight="700" fill="#f4f8ff">AOrchestra</text>
+    <text x="42" y="139" font-size="19" fill="#a9bed5">Brownfield development with OpenCode V2</text>
+    <text x="42" y="188" font-size="16" fill="#6fe0d2">Main-agent ownership. Task-specific subagents.</text>
+    <text x="42" y="217" font-size="14" fill="#a9bed5">Work directly, or compose the capabilities a task needs.</text>
+
+    <text x="615" y="39" font-size="13" fill="#a9bed5">WHEN DELEGATION HELPS</text>
+    <g stroke="#789bb9" stroke-width="2" fill="none" marker-end="url(#arrow)">
+      <path d="M684 139H753"/>
+      <path d="M990 139H1052"/>
+      <path d="M1136 140H1164V242H653V183"/>
+    </g>
+    <rect x="621" y="108" width="63" height="63" rx="19" fill="url(#accent)"/>
+    <path d="M637 148L653 123L669 148M643 140H663" fill="none" stroke="#112b40" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+    <text x="653" y="94" text-anchor="middle" font-size="14" fill="#b8cce0">Main agent</text>
+
+    <text x="875" y="62" text-anchor="middle" font-size="14" fill="#b8cce0">Compose a task contract</text>
+    <rect x="760" y="76" width="230" height="130" rx="14" fill="#15283e" stroke="#537a9b" stroke-width="2"/>
+    <g fill="#26465d">
+      <rect x="776" y="93" width="27" height="27" rx="7"/>
+      <rect x="884" y="93" width="27" height="27" rx="7"/>
+      <rect x="776" y="159" width="27" height="27" rx="7"/>
+      <rect x="884" y="159" width="27" height="27" rx="7"/>
+    </g>
+    <g fill="#6fe0d2" font-size="16" font-weight="600" text-anchor="middle">
+      <text x="790" y="113">M</text><text x="898" y="113">T</text>
+      <text x="790" y="179">I</text><text x="898" y="179">C</text>
+    </g>
+    <g fill="#dce9f7" font-size="14">
+      <text x="811" y="113">Model</text><text x="919" y="113">Tools</text>
+      <text x="777" y="146" font-size="12" fill="#a9bed5">Selected for this task</text>
+      <text x="811" y="179" font-size="12">Instructions</text><text x="919" y="179">Context</text>
+    </g>
+    <rect x="1060" y="108" width="76" height="63" rx="14" fill="#20364e" stroke="#79a8cc" stroke-width="2"/>
+    <path d="M1080 128L1088 136L1080 144M1096 145H1116" fill="none" stroke="#afd1eb" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+    <text x="1098" y="94" text-anchor="middle" font-size="14" fill="#b8cce0">Create</text>
+    <text x="1098" y="193" text-anchor="middle" font-size="12" fill="#b8cce0">Scoped child session</text>
+    <rect x="702" y="230" width="335" height="22" rx="6" fill="#15283e"/>
+    <text x="869" y="245" text-anchor="middle" font-size="12" fill="#b8cce0">Return results for main-agent verification and review</text>
+  </g>
+</svg>

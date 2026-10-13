@@ -302,3 +302,47 @@ test('setup adds analysis concurrency default and retains existing overrides', (
     expect(mergeSetup(after, shippedTemplate, 'aorchestra-opencode-v2@0.7.0', models)).toBe(after);
   }
 });
+
+test('setup retains lower-priority JSON agent customizations when writing global JSONC', () => {
+  const lower = {
+    default_agent: 'build',
+    agents: {
+      aorchestra: { steps: 17, permissions: [{ action: 'shell', resource: '*', effect: 'deny' }] },
+      'aorchestra-executor': { steps: 11 },
+    },
+  };
+  const upperRules = [{ action: 'read', resource: '*', effect: 'ask' }];
+  const upper = JSON.stringify({ agents: { aorchestra: { permissions: upperRules } } });
+  const after = mergeSetup(
+    upper,
+    template,
+    'aorchestra-opencode-v2@1.2.3',
+    models,
+    false,
+    [],
+    undefined,
+    lower,
+  );
+  const agents = readConfig(after).agents;
+  expect(agents.aorchestra.steps).toBe(17);
+  expect(agents['aorchestra-executor'].steps).toBe(11);
+  expect(agents.aorchestra.permissions).toEqual([
+    ...lower.agents.aorchestra.permissions,
+    ...upperRules,
+  ]);
+  expect(agents.aorchestra.system).toBe('Main instructions');
+  expect(lower.agents.aorchestra.steps).toBe(17);
+  expect(readConfig(after).default_agent).toBeUndefined();
+  expect(
+    mergeSetup(
+      after,
+      template,
+      'aorchestra-opencode-v2@1.2.3',
+      models,
+      false,
+      [],
+      undefined,
+      lower,
+    ),
+  ).toBe(after);
+});

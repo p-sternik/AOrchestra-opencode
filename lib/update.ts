@@ -35,6 +35,15 @@ const diagnosticCodes = new Set([
   'GLOBAL_CONFIG_UNKNOWN',
   'MODEL_REQUIRED',
   'MODEL_NOT_IN_CATALOGUE',
+  'GLOBAL_CHECK_FAILED',
+  'GLOBAL_AGENT_CONFIG_MISSING',
+  'GLOBAL_PLUGIN_CONFIG_MISSING',
+  'PLUGIN_NOT_LOADED',
+  'RESOLVED_PRIMARY_MISSING',
+  'NATIVE_VERSION_STATUS_MISMATCH',
+  'BUNDLED_SKILL_NOT_REGISTERED_EXPLICITLY',
+  'NATIVE_FAILURE_TELEMETRY_NOT_OBSERVED',
+  'NATIVE_CONCURRENT_CHILD_MISMATCH',
   'UNEXPECTED_PLUGIN_PACKAGE',
   'NpmInstallFailedError',
   'AppProcessError',
@@ -60,7 +69,7 @@ function diagnosticText(text: string): string[] {
     ...new Set(text.match(/\b[A-Za-z][A-Za-z_]+\b/g)?.filter((code) => diagnosticCodes.has(code))),
   ];
 }
-function updateDiagnostic(error: unknown): string {
+export function updateDiagnostic(error: unknown): string {
   const codes = new Set<string>();
   let kind = 'unknown error';
   for (let depth = 0; depth < 4 && error && typeof error === 'object'; depth++) {

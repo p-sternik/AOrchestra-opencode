@@ -6,9 +6,17 @@ For installation and everyday use, start with the [README](../README.md).
 
 Prefer the packaged `aorchestra setup` command in the [README](../README.md).
 It invokes native plugin add, pins the stable npm version or explicit main commit,
-embeds the installed instructions and merges global JSONC. Native
-`opencode plugin add aorchestra-opencode-v2@latest` (or `opencode2 plugin add`)
+embeds the installed instructions and merges global JSONC.
+
+Published 0.8.0–0.8.1 omit
+`scripts/eval-usage.ts`, which their smoke checker imports. Packaged setup/check
+can therefore fail with `Cannot find module './eval-usage'` after saving config.
+Main includes the missing helper; do not treat a failed check as verified setup.
+
+Native `opencode plugin add aorchestra-opencode-v2@latest` (or `opencode2 plugin add`)
 only registers the plugin; run setup to configure or update its agents and models.
+On main, first-launch setup can complete this configuration on the next OpenCode
+launch, as described below. Published npm 0.8.1 still requires packaged setup.
 Setup and native checks accept stable OpenCode `>=2.0.26 <3.0.0`, with API packages
 pinned to 2.0.26. Native checks passed on runtimes 2.0.26 and 2.0.27; other accepted
 versions still need integration checking. CLIs through 0.4.2 enforce the former
@@ -23,6 +31,51 @@ plugin directory and instruction paths pointing to the permanent harness checkou
 or a package spec and embedded instruction text for a packaged installation.
 Normal use requires no project config or OPENCODE_CONFIG override. Project-local
 config can still override global settings.
+
+## First-launch setup
+
+This flow is on main and is not included in published npm 0.8.1. Native `opencode plugin add aorchestra-opencode-v2@latest` installs/registers the package;
+it does not execute the package's installer. Once a release includes this feature,
+the loaded server plugin checks its global registration on startup and completes
+missing agent configuration. No repository checkout is needed.
+
+An available main model from the global config is reused. Otherwise the TUI home
+screen offers a native model picker. If no provider models are available, sign in
+through OpenCode, then run `/aorchestra-setup` or choose **Set up AOrchestra** in
+the command palette. Cancelling model selection leaves configuration unchanged.
+Headless users can use packaged `setup --model=provider/model` as before.
+
+The plugin invokes its own packaged `aorchestra configure` command. This uses the
+same discovery, model validation, JSONC merge, backup and no-inference global check
+as setup, while skipping `plugin add` and package reinstallation. It does not run
+the coding agent. Restart OpenCode after successful configuration. Both existing
+agent definitions are left intact; use setup to update their instructions.
+
+Only an actually loaded package whose source/version matches the single global
+AOrchestra registration may start configuration. Local/source plugins, project
+package overrides, explicit config/content environment overrides and conflicting
+JSON/JSONC registrations cannot authorize a global rewrite. Project config and
+authored instructions are preserved. The worker reads global configuration in a
+neutral directory and retains custom permissions and available model-tier choices.
+Stable `@latest`/bare registrations are pinned to the loaded version and become
+managed for updates; explicit versions and Git specs retain manual pins.
+
+Setup and automatic updates share the native global-config lock. Worker and smoke
+processes disable first-launch setup to prevent recursive configuration. The
+read-only `aorchestra.setup.get` RPC reports progress; `configure` retries discovery
+and accepts a selected model. A failed check leaves the backed-up saved change
+visible, reports failure and recommends packaged setup; it does not roll back.
+Once configuration starts, its worker finishes across the native config-triggered
+plugin reload. Discovery/queued work can be cancelled; the worker has a 15-minute
+timeout that stops its process tree. Diagnostics expose fixed error categories,
+not provider settings or arbitrary subprocess output.
+
+Set plugin option `autoSetup: false` to disable the flow, or temporarily set
+`AORCHESTRA_DISABLE_SETUP=1`. The ordinary packaged installer remains available.
+`aorchestra configure --model=provider/model` is also available on main, but
+requires an installed registration matching the CLI version and cannot change
+its source. For an existing Git/pinned source, pass its registered
+`--package=<spec>`; use setup for installation or source/version changes.
 
 ## Automatic updates
 
@@ -516,6 +569,8 @@ bun run eval:check
 bun scripts/version-check.ts
 npm run pack:check
 bun run check
+npm exec --call='bun tests/fixtures/onboarding-native.ts'
+npm exec --call='bun tests/fixtures/onboarding-native.ts --configured-model'
 ```
 
 If the CLI on PATH is a broken wrapper or belongs to another platform, select a
@@ -532,6 +587,15 @@ a temporary localhost server and isolated database under `work/runtime`, tests p
 loading and controlled failure telemetry, and makes zero external model calls.
 CI runs the deterministic checks on Windows and Linux; native smoke is a local
 runtime integration check.
+
+The additional onboarding fixture packs the current source and serves it through
+a temporary localhost npm registry, with isolated global config/cache/state/database.
+It exercises native plugin add, model selection, preserved config/backup, the
+configuration-only worker's global check and agent loading after restart. Its
+dummy provider has a localhost endpoint that rejects and counts inference; no
+paid provider or user credentials are used. Bun and `OPENCODE_BIN` must identify
+working native executables. Run it through `npm exec --call` so npm's CLI path is
+available without downloading another Bun version.
 
 `bun run check` validates the repository template. `bun run check -- --global`
 validates normal global discovery instead, removing explicit config/content

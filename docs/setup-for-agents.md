@@ -45,6 +45,13 @@ instructions, permissions and models. Native plugin add registers the package;
 it does not perform the full harness configuration. Setup handles an existing
 registration and is also the supported update path.
 
+Main additionally supports first-launch configuration after native plugin add;
+npm 0.8.1 does not include it. It reuses a configured model or offers a native TUI
+picker, then performs the same merge/backup/global check without reinstalling.
+Use `/aorchestra-setup` after provider sign-in to retry selection, and restart after
+success. For unattended installation, continue to prefer packaged setup with an
+observed `--model` identifier. See [first-launch setup](reference.md#first-launch-setup).
+
 The CLI discovers global JSON/JSONC, selects JSONC if present, validates input,
 installs through native plugin add, backs up a changed config and merges only
 AOrchestra entries. It pins stable npm to the CLI version or main to a commit,

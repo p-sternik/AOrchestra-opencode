@@ -8,6 +8,7 @@ let release: ((value: unknown) => void) | undefined;
 let signal: AbortSignal | undefined;
 const ctx = {
   theme: { text: { muted: '#999999' } },
+  keymap: { layer: () => {} },
   data: { session: { get: () => ({ location: { directory: '/server/project' } }) } },
   client: {
     rpc: () => ({

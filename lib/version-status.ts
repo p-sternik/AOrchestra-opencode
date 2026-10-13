@@ -1,5 +1,65 @@
 import pkg from '../package.json';
 
+export type SetupStatus = {
+  state:
+    | 'checking'
+    | 'needs-model'
+    | 'configuring'
+    | 'ready'
+    | 'restart-required'
+    | 'skipped'
+    | 'failed';
+  models: string[];
+  message: string;
+};
+export const setupRpc = {
+  id: 'aorchestra.setup',
+  methods: {
+    get: {
+      input: { type: 'object', additionalProperties: false, properties: {} },
+      output: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          state: {
+            type: 'string',
+            enum: [
+              'checking',
+              'needs-model',
+              'configuring',
+              'ready',
+              'restart-required',
+              'skipped',
+              'failed',
+            ],
+          },
+          models: { type: 'array', items: { type: 'string' } },
+          message: { type: 'string' },
+        },
+        required: ['state', 'models', 'message'],
+      },
+    },
+    configure: {
+      input: {
+        type: 'object',
+        additionalProperties: false,
+        properties: { model: { type: 'string', minLength: 1 } },
+      },
+      output: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          state: { type: 'string' },
+          models: { type: 'array', items: { type: 'string' } },
+          message: { type: 'string' },
+        },
+        required: ['state', 'models', 'message'],
+      },
+    },
+  },
+  events: {},
+} as const;
+
 export type VersionStatus = {
   version: string;
   availableVersion: string | null;

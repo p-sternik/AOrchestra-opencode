@@ -27,6 +27,10 @@ for (const path of [
   'bin/aorchestra.mjs',
   'scripts/cli.ts',
   'scripts/update.ts',
+  'scripts/check.ts',
+  'scripts/eval-usage.ts',
+  'lib/onboarding.ts',
+  'docs/assets/readme-banner.svg',
   'lib/update.ts',
   'lib/version-status.ts',
   'plugins/aorchestra.ts',
@@ -71,7 +75,11 @@ try {
     stderr: 'pipe',
   });
   const output = await new Response(help.stdout).text();
-  if ((await help.exited) !== 0 || !output.includes('aorchestra setup'))
+  if (
+    (await help.exited) !== 0 ||
+    !output.includes('aorchestra setup') ||
+    !output.includes('aorchestra configure')
+  )
     throw new Error('PACKAGED_CLI_FAILED');
   const tuiCheck = join(consumer, 'tui-check.ts');
   await writeFile(tuiCheck, await readFile(join(root, 'tests/fixtures/packaged-tui.ts'), 'utf8'));

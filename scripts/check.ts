@@ -6,7 +6,7 @@ import { metricsRpc, type Run } from '../lib/telemetry';
 import { Npm } from '@opencode/util/npm';
 import { BUNDLED_SKILLS, permissionRules } from '../lib/core';
 import { prepareEvaluationSession, trajectorySessionIDs } from './eval-usage';
-import { versionRpc, type VersionStatus } from '../lib/version-status';
+import { versionRpc, setupRpc, type SetupStatus, type VersionStatus } from '../lib/version-status';
 import packageInfo from '../package.json';
 const root = resolve(import.meta.dir, '..');
 const globalMode = process.argv.includes('--global');
@@ -32,6 +32,7 @@ await mkdir(scratch, { recursive: true });
 const checkEnv: NodeJS.ProcessEnv = {
   ...process.env,
   AORCHESTRA_DISABLE_UPDATE: '1',
+  AORCHESTRA_DISABLE_SETUP: '1',
   OPENCODE_DB: resolve(scratch, globalMode ? 'global-check.db' : 'check.db'),
 };
 if (globalMode) {
@@ -122,7 +123,8 @@ try {
   ]);
   for (
     let attempt = 0;
-    attempt < 20 && !plugins.data.some((p) => p.id === 'aorchestra');
+    attempt < 120 &&
+    !plugins.data.some((p) => p.id === 'aorchestra' && p.state.status === 'active');
     attempt++
   ) {
     await new Promise((resolve) => setTimeout(resolve, 250));
@@ -175,6 +177,12 @@ try {
     status.updateError !== undefined
   )
     throw new Error('NATIVE_VERSION_STATUS_MISMATCH');
+  if (!globalMode) {
+    const setup = (await client
+      .rpc(setupRpc)
+      .get({}, { location: { directory: project } })) as SetupStatus;
+    if (setup.state !== 'skipped') throw new Error('NATIVE_SETUP_GUARD_MISSING');
+  }
   const expectedSkills = BUNDLED_SKILLS.map((skill) => ({
     ...skill,
     path: resolve(bundleRoot, `skills/${skill.directory}/SKILL.md`),

@@ -1,61 +1,63 @@
 # AOrchestra for OpenCode V2
 
-[![CI / Release](https://github.com/p-sternik/AOrchestra-opencode/actions/workflows/release.yml/badge.svg?branch=main)](https://github.com/p-sternik/AOrchestra-opencode/actions/workflows/release.yml)
+![AOrchestra: a main agent composes model, tools, instructions and context for a scoped child session](docs/assets/readme-banner.svg)
+
 [![npm](https://img.shields.io/npm/v/aorchestra-opencode-v2)](https://www.npmjs.com/package/aorchestra-opencode-v2)
-[![Release](https://img.shields.io/github/v/release/p-sternik/AOrchestra-opencode)](https://github.com/p-sternik/AOrchestra-opencode/releases)
-[![Tested OpenCode](https://img.shields.io/badge/tested_OpenCode-2.0.26%20%26%202.0.27-blue)](VALIDATION.md)
+[![CI / Release](https://github.com/p-sternik/AOrchestra-opencode/actions/workflows/release.yml/badge.svg?branch=main)](https://github.com/p-sternik/AOrchestra-opencode/actions/workflows/release.yml)
 
-**An OpenCode harness for working on existing codebases.** One main agent owns the
-task, works directly when it makes sense and delegates bounded work when useful.
-It favors existing patterns, small patches and compatibility checks.
+**An OpenCode harness for changing existing codebases while preserving their contracts.**
+One main agent owns your task, follows existing patterns and works directly or
+delegates bounded work when useful. Start with [global setup](#quick-start); no
+repository clone is required.
 
-Inspired by [FoundationAgents/AOrchestra](https://github.com/FoundationAgents/AOrchestra),
-adapted to native OpenCode V2 sessions, permissions and plugin storage.
+## The problem
 
-## Why use it?
+In unfamiliar, brownfield and legacy repositories, a small change can affect
+hidden callers, undocumented conventions and old compatibility requirements.
+Coding agents need to find the relevant implementation, limit the patch and check
+both the requested behavior and what must stay unchanged.
 
-- Reuse existing implementations and tests before adding abstractions or rewrites.
-- Delegate selectively with relevant context and a clear change scope.
-- Select project checks for affected files and require fresh native evidence.
-- Resume tracked workflow state with bounded repair cycles after failed checks.
-- Review local execution metrics without an extra model call after every task.
+## Why AOrchestra
 
-> **Status:** early-stage, native smoke checks pass on OpenCode **2.0.26 and 2.0.27**.
-> The runtime gate accepts stable **>=2.0.26 <3.0.0** releases;
-> representative real-model brownfield effectiveness and cost remain unmeasured.
-> See [validation results](VALIDATION.md). Stable packages are available on npm.
-> Changes on main reach stable users only after a release is published.
+Native OpenCode provides agents, tools, sessions, permissions and storage.
+AOrchestra adds a brownfield workflow on those primitives:
 
-When any other agent is selected, harness tools and task-state
-injection are inactive. A globally installed plugin still appears in OpenCode's
-discovery/loading logs; that does not mean AOrchestra is executing the task.
-The internal executor requires an active contract owned by the AOrchestra agent.
+- **Follow existing code:** instructions favor nearby implementations and tests,
+  focused changes and reuse over new abstractions.
+- **Track acceptance:** scoped tasks record compatibility constraints, dependencies,
+  fresh check evidence and bounded repair attempts.
+- **Create task-specific subagents:** compose **model, tools, instructions and
+  context (M · T · I · C)** for a fresh, scoped native session when delegation helps.
+- **Build context and review evidence:** explicitly request a repository map or
+  analyze local execution reports with bundled skills.
 
-## Install globally
+Use it for bug fixes, changes across modules and repository onboarding. Delegation
+is optional; lower cost, higher quality and improved reliability are **not established**.
+
+## Quick Start
 
 ### 1. Check the prerequisites
 
-Install **OpenCode V2 >=2.0.26 <3.0.0**, **Bun** (tested with 1.2.15), **Node.js 22+ / npm**
-and **Git**. Authenticate your intended provider in OpenCode. Python is optional,
-needed only for the repository-context helper and its development tests.
+Install **OpenCode V2**, **Bun** (tested with 1.2.15), **Node.js 22+ / npm** and **Git**.
+Authenticate your intended provider in OpenCode before setup.
 
 ```sh
 opencode2 --version
 bun --version
+node --version
+npm --version
+git --version
 ```
 
-This guide uses `opencode2`. If your V2 executable is named `opencode`, set
-`OPENCODE_BIN=opencode` before running the installer. In PowerShell use
-`$env:OPENCODE_BIN = 'opencode'`; in a Unix shell use `export OPENCODE_BIN=opencode`.
+Setup accepts stable OpenCode **>=2.0.26 <3.0.0**; native smoke checks passed on
+**2.0.26 and 2.0.27**, with API packages pinned to 2.0.26. Other accepted versions
+still need integration checking. Older runtimes, prereleases and V3 are rejected.
+See [runtime compatibility](VALIDATION.md#runtime-version-compatibility).
 
-The minimum runtime and pinned API dependencies remain 2.0.26. Native smoke checks
-passed on 2.0.26 and 2.0.27; the version gate also accepts newer stable V2 releases.
-The native check verifies loading and required APIs on your installed runtime.
-Versions below 2.0.26, prereleases and V3 are not accepted. See
-[runtime validation](VALIDATION.md#runtime-version-compatibility) for observed results.
-
-Published CLIs through 0.4.2 still require exactly 2.0.26. The expanded range applies
-to releases containing this change; `@latest` receives it after npm publication.
+This guide uses `opencode2`. If your V2 executable is named `opencode`, use that
+name in runtime commands and set `export OPENCODE_BIN=opencode` in a Unix shell
+or `$env:OPENCODE_BIN = 'opencode'` in PowerShell before setup and checks.
+Python is optional, used only by the repository-map helper.
 
 ### 2. Run setup
 
@@ -63,244 +65,206 @@ to releases containing this change; `@latest` receives it after npm publication.
 npx --ignore-scripts --yes --package=aorchestra-opencode-v2@latest aorchestra setup
 ```
 
-No manual copying or cloning is needed. Setup:
+> **Published-package issue:** 0.8.0–0.8.1 omit a smoke-checker helper, so setup/check
+> can fail with `Cannot find module './eval-usage'` after saving configuration.
+> This branch fixes packaging; use a release containing the fix before expecting
+> setup verification to pass. See [installation diagnostics](docs/reference.md#global-installation).
 
-- Finds the active global config, including `OPENCODE_CONFIG_DIR` overrides.
-- Reuses an available configured main model or asks you to choose one.
-- Installs the plugin through OpenCode's native `plugin add` command.
-- Merges the agents and options into global JSON/JSONC, preserving comments,
-  providers, unrelated plugins and existing settings. Changed files get a backup.
-- Checks actual global loading with an isolated database and zero model calls.
+Setup installs the plugin through native OpenCode and merges **agents,
+instructions, permissions and models** into your active global JSON/JSONC config.
+It preserves comments, unrelated agents, providers, plugins and settings, and
+backs up changed configuration. Project-local config and instructions stay intact.
+Setup reuses an available configured main model or asks you to choose one.
 
-Model discovery uses the normal OpenCode database so existing provider sign-ins
-remain available; it queries the catalogue without running a task. The smoke
-check uses a separate test database.
+It then checks global loading with an isolated database and **zero model calls**.
+That check does not prove successful provider inference. The CLI installs its own
+exact published version; `@latest` does not install unreleased main changes.
 
-Stable setup installs the exact npm version of the CLI you invoked. Running the
-latest published CLI updates to that release; it does not install unreleased main
-changes. Installation disables lifecycle scripts and leaves global npm settings intact.
-The npm badge above shows the latest registry version; the Release badge tracks
-GitHub releases, which can precede npm publication. Check the registry directly with
-`npm view aorchestra-opencode-v2 version` or print the invoked CLI version with
-`npx --ignore-scripts --yes --package=aorchestra-opencode-v2@latest aorchestra --version`.
+> `opencode2 plugin add aorchestra-opencode-v2@latest` (or `opencode plugin add`)
+> only registers the plugin. It does **not** complete AOrchestra setup. If you
+> already ran it, run the setup command above to finish configuration.
 
-For package installation through OpenCode, use:
+**Coming from main:** first-launch setup completes a native `plugin add`
+registration when you next open OpenCode. It reuses an available configured model
+or shows a model picker, preserves unrelated settings, backs up changes and runs
+the no-inference check. Restart when prompted. This flow is **not in npm 0.8.1**;
+until a release includes it, use the setup command above. See
+[first-launch setup](docs/reference.md#first-launch-setup).
 
-```sh
-opencode2 plugin add aorchestra-opencode-v2@latest
-```
+### 3. Run your first task
 
-Use `opencode plugin add aorchestra-opencode-v2@latest` if your V2 binary is named
-`opencode`. This registers the plugin; it does not merge the bundled agent
-instructions, permissions or model choices. Run the setup command above to finish
-configuration (it handles an existing registration), or follow the
-[manual setup guide](docs/setup-for-agents.md#manual-fallback).
-For manual updates, run setup again so agent instructions and options match the
-installed package; `plugin add` alone only updates the plugin registration.
-
-For development changes, run the CLI from GitHub main and explicitly choose main:
+From your project's directory:
 
 ```sh
-npx --allow-git=all --ignore-scripts --yes --package=git+https://github.com/p-sternik/AOrchestra-opencode.git#main aorchestra setup --channel=main
+opencode2 run --standalone --agent aorchestra 'Fix the missing-user error. Preserve the public API and add a regression test.'
 ```
 
-This resolves main to an exact commit. The per-command Git allowance is required
-by [npm 12](https://docs.npmjs.com/cli/v12/using-npm/config/#allow-git); older npm
-versions may warn about it. Channel selection and explicit `--package` are mutually
-exclusive. The original 0.3.0 CLI defaults to GitHub main; current releases default
-to stable npm.
+No project config is required. Project-local settings can override global setup.
+Harness tools and task-state injection are active only when AOrchestra is selected;
+a globally loaded plugin can still appear in logs when another agent runs.
 
-The selected source/config/backup paths are printed. Agent instructions come from
-that installed package and are stored in the global config; no checkout paths
-are required. The skill stays bundled with the plugin.
+## Common workflows
 
-For non-interactive setup, provide an available model explicitly:
+Give AOrchestra a concrete outcome and the behavior to preserve:
 
-```sh
-npx --ignore-scripts --yes --package=aorchestra-opencode-v2@latest aorchestra setup --model=provider/model
+**Fix a bug:** use the first-task command above, naming the failing behavior,
+public contract and regression test you need.
+
+**Change multiple modules:**
+
+```text
+Add an optional timeout to the API client and update its callers across modules.
+Keep existing call signatures working. Find affected consumers and run their checks.
 ```
 
-Replace `provider/model` with an actual identifier. Existing available tier models
-are retained; a fresh setup uses the main model for all tiers. Use `--fast=...`,
-`--balanced=...` and `--strong=...` to select separate models. Add `--default` to
-replace an existing default agent with AOrchestra.
+**Map an unfamiliar repository:**
 
-If global JSON already registers AOrchestra and JSONC also exists, setup asks you
-to move that registration into JSONC rather than modifying two files silently. Explicit config
-overrides and project-local config can supersede global settings; setup reports
-terminal overrides, and `check --project=...` tests a selected project location.
-
-### 3. Use it in any project
-
-Open a terminal in your project and run:
-
-```sh
-opencode2 run --standalone --agent aorchestra 'Fix the missing-user error. Keep the public API unchanged and add a regression test.'
+```text
+Use aorchestra-repo-context to map this repository's entrypoints, modules and tests.
+Update AGENTS.md with concise navigation, preserving its existing rules. Write in English.
 ```
 
-No project config or `OPENCODE_CONFIG` assignment is required. OpenCode's native
-permissions still apply. New default permissions allow existing `typecheck`,
-`lint` and `test` package scripts, focused Bun tests and routine Git inspection.
-Other shell commands ask, and Git push retains its deny rule. These allowances
-trust repository scripts to execute code; they are not process isolation. Catalogue
-availability and installation checks do not establish successful provider inference.
+**Review execution evidence:** first [generate a report](#updates-and-troubleshooting),
+then ask:
 
-## Check, update and report
-
-```sh
-npx --ignore-scripts --yes --package=aorchestra-opencode-v2@latest aorchestra check
-npx --ignore-scripts --yes --package=aorchestra-opencode-v2@latest aorchestra check --project=/absolute/path/to/project
-npx --ignore-scripts --yes --package=aorchestra-opencode-v2@latest aorchestra report --project=/absolute/path/to/project --output=/path/to/report.md
+```text
+Use aorchestra-improve to analyze /path/to/report.md. Identify up to three
+evidence-backed bottlenecks, propose the smallest changes and define validation
+criteria. Do not modify the harness or run paid experiments.
 ```
 
-Run the latest published CLI with setup again to update to a stable release.
-It replaces recognized AOrchestra registrations, preserves existing budgets and model choices where
-available, and avoids rewriting an unchanged config. For a specific published npm
-version or Git revision, use `setup --package=<npm-or-git-spec>` with the matching
-CLI version; a version mismatch fails before saving global config. The package
-name is `aorchestra-opencode-v2`. A main-channel update uses the GitHub command above.
-
-Stable setup enables automatic updates in releases containing this feature.
-Checks run at startup and every 24 hours while OpenCode stays open. Failures appear
-in the sidebar as `Update failed · run setup manually`; details are in the server log.
-Existing installations need setup once from such a release to enable it. On
-startup, the installed plugin checks npm in the background, with a 24-hour
-interval recorded in native plugin storage. New stable releases within the same
-major version run their packaged setup, including the global no-inference check.
-Setup preserves selected models, unrelated configuration and custom permissions,
-and backs up changed configuration. Restart OpenCode after the update notification.
-
-The session sidebar footer shows the running AOrchestra version. A second line
-shows a newer available version, or an installed update requiring restart. The
-version comes from the active server plugin; it changes when that plugin reloads.
-
-Merge these options into the existing AOrchestra plugin registration:
-
-```json
-{ "autoUpdate": false, "updateCheck": true }
-```
-
-`autoUpdate: false` keeps notifications without installation; `updateCheck: false`
-disables both. Explicit `setup --package=...`, Git/main and source installations
-do not auto-update. Changing the registered package version also creates a manual
-pin: the installer-written `updateManagedPackage` must match the package spec for
-automatic installation. Leave this marker to setup. Major upgrades require manual
-setup. Checks with explicit `OPENCODE_CONFIG`/`OPENCODE_CONFIG_CONTENT` overrides
-skip updates; `AORCHESTRA_DISABLE_UPDATE=1` temporarily disables the updater.
-See [update behavior and failure handling](docs/reference.md#automatic-updates).
-
-Known earlier default permissions are migrated automatically. Customized ordered
-rules are preserved, and setup reports `customPermissionsPreserved: true` when
-routine-command defaults were not applied. Review your global agent's permissions
-to adopt those defaults. Project-local overrides remain effective.
-
-Reports make no model calls or policy changes. Costs are estimates, and runtime
-completion alone does not establish semantic correctness. To undo setup, use the
-reported backup to restore AOrchestra-related changes while retaining subsequent
-unrelated edits. Remove its plugin/agent entries before deleting installation data.
-
-## Repository context
-
-Request a map explicitly:
-
-```sh
-opencode2 run --standalone --agent aorchestra 'Use aorchestra-repo-context to map this repository and update AGENTS.md with concise navigation. Write the documentation in English.'
-```
-
-The bundled skill has the native ID `aorchestra-repo-context`, preventing a collision
-with a separately installed `repo-context`. It reuses existing docs and preserves
-authored AGENTS.md rules. Ordinary coding does not require a documentation phase.
-Other agents retain normal skill discovery; AOrchestra's main agent permits only
-its bundled repo-context and improvement skills by default.
+Both skills are invoked explicitly. Mapping reuses existing documentation;
+improvement review separates observations from hypotheses and can report
+insufficient data. Report generation makes no model calls; skill interpretation
+runs in your model-backed agent session.
 
 ## How it works
 
 ```mermaid
 flowchart LR
-    Request[Your task] --> Main[Main agent]
-    Main -->|Work directly| Direct[Native OpenCode tools]
-    Main -->|Delegate when useful| Worker[Scoped child session]
-    Direct --> Check[Main agent checks the result]
-    Worker --> Check
-    Check --> Result[Result and verification evidence]
+    Task[Your task] --> Main[Main agent: inspect and plan]
+    Main -->|DIRECT| Direct[Work with native tools]
+    Main -->|Selective delegation| Contract[Compose task contract<br/>M: model · T: tools<br/>I: instructions · C: context]
+    Contract --> Child[Create scoped native child session]
+    Direct --> Review[Main agent: check evidence and review]
+    Child -->|Result and evidence| Review
+    Review -->|More work or bounded repair| Main
+    Review --> Result[Outcome with evidence and open checks]
 ```
 
-Each delegation gets task-specific instructions, context, tools and a model.
-It also requires a bounded source handoff separating facts, candidates, unknowns
-and checks. Fast research is limited to declared fact lookup; synthesis uses
-balanced/strong. A reasoned fast-to-strong retry is available within the existing
-two-attempt budget. See the [routing contract](docs/reference.md#task-contracts-and-verification).
-Tracked tasks persist discovery, planning, execution, verification and bounded repair
-phases. Verification selects configured path checks or existing package scripts,
-then the primary runs them through native tools and permissions. Worker completion
-is separate from tracked-task acceptance. Workers have scoped
-tools/edit paths; the main agent runs tests. Permissions are not an OS sandbox.
-Failed changes are not automatically rolled back. Large repositories need care
-around snapshot limits and excluded paths; see the [technical reference](docs/reference.md).
+For each delegated task, the main agent selects a configured model tier and allowed
+tools, supplies the task instruction and relevant context, and creates a fresh child
+session. Context includes a bounded source handoff with facts, unknowns and checks;
+the contract also records exact edit paths and verification requirements.
 
-## Set up with an AI agent
+Each child uses a shared executor template specialized by its task contract. The
+main agent owns the result, runs verification and reviews compatibility. Tracked work supports dependencies, persistent phases and bounded
+repair; worker completion alone does not accept a task.
 
-Give this prompt to a coding agent with access to your terminal and files:
+- **Runtime completion:** execution finished; correctness is still unknown.
+- **Tracked acceptance:** fresh verifier evidence, scope checks and an explicit
+  compatibility review satisfy the registered task contract.
+- **Independently verified correctness:** separate behavioral and regression
+  checks test the result; their coverage still limits what they establish.
 
-```text
-Install AOrchestra globally for OpenCode V2.
-Read https://raw.githubusercontent.com/p-sternik/AOrchestra-opencode/main/docs/setup-for-agents.md
-and follow the packaged setup procedure, preserving my existing configuration.
+DIRECT work can be untracked and has no automatic semantic acceptance claim.
+See [contracts and verification](docs/reference.md#task-contracts-and-verification).
+
+## Configuration
+
+For non-interactive setup, supply an available model identifier:
+
+```sh
+npx --ignore-scripts --yes --package=aorchestra-opencode-v2@latest aorchestra setup --model=provider/model
 ```
 
-## Design sources and evidence
+Replace `provider/model` with an identifier from your authenticated provider's
+OpenCode catalogue. Existing available tier choices are retained; fresh setup uses
+one model for all tiers. Optional `--fast=...`, `--balanced=...` and `--strong=...`
+select worker models. Add `--default` to replace an existing default agent.
 
-The original architectural source is **AOrchestra: Automating Sub-Agent Creation
-for Agentic Orchestration**, Jianhao Ruan et al. (2026):
-[paper, arXiv v2](https://arxiv.org/abs/2602.03786v2) ·
-[reference implementation](https://github.com/FoundationAgents/AOrchestra).
-Its instruction/context/tools/model abstraction informs our delegation. This is
-an independent adaptation, unaffiliated with the original authors.
+Default permissions allow routine test/typecheck/lint scripts and Git inspection;
+other shell commands ask, and Git push is denied. Customized permission rules are
+preserved. These allowances trust repository scripts to execute code: **native
+permissions are not an OS sandbox**.
 
-Source reviews of mini-SWE, SWE-agent, OpenHands and Aider informed simplicity,
-recovery, verification and selective context. Published AOrchestra benchmark
-results describe the original system, not this adaptation. Our three evaluation
-fixtures are a smoke corpus; learned routing and fine-tuning are not implemented.
-See [RESEARCH.md](RESEARCH.md) for pinned revisions and [VALIDATION.md](VALIDATION.md)
-for observed checks and remaining gaps.
+Plugin options include budgets, project checks, `telemetry: false`,
+`autoSetup: false` (disable main's first-launch configuration),
+`autoUpdate: false` (notifications only) and `updateCheck: false` (disable updates
+and checks). Merge options into the existing registration; see the
+[technical reference](docs/reference.md) and [manual setup guide](docs/setup-for-agents.md#manual-fallback).
 
-## Documentation and help
+## Updates and troubleshooting
 
-| Looking for                              | Read                                     |
-| ---------------------------------------- | ---------------------------------------- |
-| Agent-assisted setup and manual fallback | [Setup guide](docs/setup-for-agents.md)  |
-| Architecture, configuration and limits   | [Technical reference](docs/reference.md) |
-| Test coverage                            | [Validation](VALIDATION.md)              |
-| Changes between releases                 | [Changelog](CHANGELOG.md)                |
-| Development, packaging and releases      | [Contributing](CONTRIBUTING.md)          |
+Rerun the Quick Start setup command to update to the latest published release,
+then restart OpenCode. Inspect the registry version and check a target project:
 
-Maintained by [Piotr Sternik](https://github.com/p-sternik). For bugs or questions,
-[open an issue](https://github.com/p-sternik/AOrchestra-opencode/issues) with the
-installed package spec/version, OpenCode version, OS and a minimal reproduction.
-Release Please prepares version/changelog PRs and automatically merges them after
-Windows/Linux validation, then publishes a Git tag and GitHub Release. npm
-publication runs in the release workflow after the owner
-configures Trusted Publishing and enables its repository variable.
-
-## Evidence-based harness improvement
-
-Invoke the bundled `aorchestra-improve` skill explicitly with a report or an
-identified project and native database:
-
-```text
-Use aorchestra-improve to analyze /path/to/report.md. Identify up to three
-evidence-backed bottlenecks, locate the matching harness implementation,
-propose the smallest change and define validation criteria. Do not modify
-the harness.
+```sh
+npm view aorchestra-opencode-v2 version
+npx --ignore-scripts --yes --package=aorchestra-opencode-v2@latest aorchestra check --project=/absolute/path/to/project
+npx --ignore-scripts --yes --package=aorchestra-opencode-v2@latest aorchestra report --project=/absolute/path/to/project --output=/path/to/report.md
 ```
 
-The skill separates observations from hypotheses and can report insufficient data.
-It does not run during ordinary programming, change the harness or launch paid
-experiments. Reports expose observed terminal, interrupted, unfinished and cost
-coverage; measured-record sums exclude unknown costs. A repeated inspection may
-be necessary, and native success does not establish semantic correctness.
+Use your real project/output paths. Reports must read the same project and native
+database as the execution; see [report options](docs/reference.md#metrics-and-improvement-reports).
 
-Follow the [improvement process](docs/reference.md#reviewing-harness-improvements)
-for matched evaluation and reviewed adoption. Existing custom skill permissions
-remain intact; users with a customized deny policy may need an explicit
-`skill` allow rule for `aorchestra-improve` on the primary agent.
+Published **0.8.1** includes the setup flow, both skills, reports, managed stable
+automatic updates, recurring checks and sidebar update-failure status. Main adds
+first-launch setup and `/aorchestra-setup` to retry model selection after provider
+authentication.
+These main-only changes reach npm users after publication. Major upgrades and
+Git/source installations require manual setup; see [update details](docs/reference.md#automatic-updates).
+
+If setup fails, inspect its diagnostic and printed config/backup paths. Explicit
+`OPENCODE_CONFIG` / `OPENCODE_CONFIG_CONTENT` overrides or project config can change
+what loads. Conflicting global JSON/JSONC registrations need reconciliation.
+A failed post-install check can leave the backed-up change saved; no automatic
+rollback occurs. To undo setup, restore only AOrchestra-related entries from the
+backup while preserving subsequent unrelated edits.
+
+<details>
+<summary>Development channel: GitHub main</summary>
+
+For explicitly requested unreleased changes:
+
+```sh
+npx --allow-git=all --ignore-scripts --yes --package=git+https://github.com/p-sternik/AOrchestra-opencode.git#main aorchestra setup --channel=main
+```
+
+Setup pins an exact commit. `--allow-git=all` is a per-command npm 12 allowance;
+older npm may warn. CLI `--channel` and `--package` options are mutually exclusive.
+
+</details>
+
+## Evidence and limitations
+
+[Validation](VALIDATION.md) records deterministic tests, packaging checks and
+no-inference native integration checks. They validate workflow mechanics,
+loading, permissions and telemetry; they do not establish effectiveness on real
+legacy repositories, cost savings or improved reliability. Prompt instructions
+are not behavioral guarantees, and missing usage remains unknown rather than zero.
+
+Selective delegation may add overhead. Large repositories need care with snapshot
+limits and exclusions. Failed edits are not automatically rolled back, and parallel
+writers are not isolated. Read the [technical limits](docs/reference.md#limits)
+and [benchmark methodology](docs/benchmark.md) before interpreting results.
+Model-backed evaluation is opt-in and can incur provider costs.
+
+Inspired by **AOrchestra: Automating Sub-Agent Creation for Agentic Orchestration**,
+Jianhao Ruan et al. (2026): [paper](https://arxiv.org/abs/2602.03786v2) ·
+[original implementation](https://github.com/FoundationAgents/AOrchestra).
+This is an independent adaptation, unaffiliated with the authors. Their published
+benchmark results describe the original system. See [research sources](RESEARCH.md).
+
+## Documentation
+
+- [Setup for coding agents and manual fallback](docs/setup-for-agents.md)
+- [Technical reference: configuration, verification, reports and limits](docs/reference.md)
+- [Validation results and remaining gaps](VALIDATION.md)
+- [Benchmark methodology](docs/benchmark.md)
+- [Development, packaging and releases](CONTRIBUTING.md)
+- [Changelog](CHANGELOG.md)
+
+Maintained by [Piotr Sternik](https://github.com/p-sternik).
+[Report an issue](https://github.com/p-sternik/AOrchestra-opencode/issues) with the
+package version, OpenCode version, OS and a minimal reproduction.

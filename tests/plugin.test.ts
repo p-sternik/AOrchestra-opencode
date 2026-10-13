@@ -22,8 +22,10 @@ async function fixture(options: Record<string, unknown> = {}) {
   const events: any[] = [];
   let wake: (() => void) | undefined;
   const ctx = {
+    app: { version: '2.0.26' },
+    plugin: { list: async () => ({ data: [] }) },
     location: { directory: root },
-    options: { updateCheck: false, ...options },
+    options: { updateCheck: false, autoSetup: false, ...options },
     storage: {
       get: async (key: string) => data.get(key),
       set: async (key: string, value: unknown) => {
