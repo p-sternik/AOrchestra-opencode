@@ -10,6 +10,8 @@ Run `npm run format` before submitting changes and `npm run format:check` to che
 formatting without writing files. Prettier is pinned in development dependencies;
 CI checks formatting on Windows and Linux. Dependencies, generated output and
 local credentials are excluded through `.prettierignore` and `.gitignore`.
+`CHANGELOG.md` is excluded from Prettier because Release Please generates its
+entries; release PRs still run formatting checks for source and other documentation.
 Keep formatting-only changes in a separate commit from behavior changes when
 possible. Formatting supplements typecheck and behavioral tests.
 Markdown keeps double-quoted front matter because the bundled skill loader reads
