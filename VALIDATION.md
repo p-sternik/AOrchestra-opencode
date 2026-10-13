@@ -656,3 +656,45 @@ Failures and recovery use controlled dependencies; a complete background upgrade
 between published npm releases and Windows timeout/TUI behavior remain untested.
 Native smoke disables the updater and does not verify actual installation.
 No paid/model-backed evaluation, publication or user configuration change ran.
+
+## First-launch setup after native plugin add
+
+Local Linux checks on 2026-10-13 with Bun 1.2.15, Node 24.15.0, npm 11.12.1 and
+OpenCode 2.0.26: typecheck and **197 tests (1,344 assertions)** passed. The
+onboarding and TUI tests cover missing/unavailable models, picker cancellation,
+provider-discovery retries, existing agents, JSON/JSONC precedence, unrelated
+configuration, lower-priority JSON agent settings and ordered permissions,
+source/version mismatches, explicit overrides, duplicate
+registrations, concurrent requests and results surviving plugin reload.
+
+The additional no-inference native fixture packs the current source and installs
+it through native plugin add from a temporary localhost registry. It exercises
+explicit model selection and reuse of an existing configured model, the packaged
+configuration-only worker, its global smoke check, exact backup preservation and
+agent loading after restart. Its configuration, cache, state and database are
+isolated. The fixture provider's localhost endpoint rejects/counts inference;
+observed model calls were **zero**. Reopening the configured project did not
+rewrite its global config or create another backup.
+
+Native integration exposed two startup behaviors: package metadata is not active
+immediately after plugin setup, and saving configuration reloads the plugin.
+Onboarding waits for active metadata and lets its started worker finish across
+that reload. The smoke checker also waits for active plugin metadata (up to 30
+seconds), including when stable pinning creates a new package cache entry. Native plugin storage preserves the check result for that server
+process, so newly saved agents alone cannot hide a failed check. A fresh server
+recognizes existing definitions; use the explicit setup command to revalidate an
+installation. Workers/checkers disable recursive onboarding, and setup shares the
+native global-config lock with the updater.
+
+Packaging now includes `scripts/eval-usage.ts`, which the smoke checker imports.
+The published 0.8.0 and 0.8.1 archives both omit this helper. Its omission caused
+the packaged configuration worker
+to fail its check even though the same command passed from a checkout. The archive
+gate checks this helper, onboarding module and README SVG; production consumer
+installation, plugin import, CLI help and TUI rendering passed.
+
+These observations establish installation/configuration mechanics on Linux with
+OpenCode 2.0.26. They do not establish live TUI interaction, Windows process-tree
+termination, every accepted V2 runtime, real provider inference or coding
+correctness. No paid evaluation, release or npm publication ran. Published npm
+0.8.1 does not contain the first-launch flow.

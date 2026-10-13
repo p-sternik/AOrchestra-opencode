@@ -77,9 +77,9 @@ an infrastructure failure. Do not edit an existing released tag or manually bump
 the version during normal development. Telemetry imports package.json so there
 is no second runtime version string to update.
 
-README uses dynamic npm and GitHub release badges rather than a second literal
-harness version. The npm badge reflects registry publication; the GitHub badge
-reflects release creation. The tested OpenCode version stays explicit and changes
+README uses npm and CI badges. The npm badge reflects registry publication;
+compatibility and published-versus-main feature notes are verified separately.
+The tested OpenCode version stays explicit and changes
 only after compatibility validation. README content bundled in a published npm
 archive remains the documentation for that release; publishing a new release does
 not rewrite older archives.

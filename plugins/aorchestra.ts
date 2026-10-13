@@ -33,6 +33,7 @@ import { taskVerifiers, validateVerificationRules, verificationPlan } from '../l
 import { startUpdateCheck, updateOptions } from '../lib/update';
 import { versionRpc, versionStatus } from '../lib/version-status';
 import pkg from '../package.json';
+import { createOnboarding } from '../lib/onboarding';
 
 const idSchema = { type: 'string', pattern: '^[a-z0-9][a-z0-9._-]{0,79}$' };
 const strings = {
@@ -179,6 +180,9 @@ export default Plugin.define({
       );
     }
     const options = ctx.options as Record<string, unknown>;
+    if (options.autoSetup !== undefined && typeof options.autoSetup !== 'boolean')
+      throw new Error('INVALID_OPTION: autoSetup');
+    const onboarding = await createOnboarding(ctx);
     updateOptions(options);
     let updates: ReturnType<typeof startUpdateCheck> = {
       info: versionStatus(pkg.version),
@@ -1393,9 +1397,11 @@ export default Plugin.define({
       });
     });
     updates = startUpdateCheck(ctx);
+    onboarding.start();
     return () => {
       eventStop.abort();
       updates.stop();
+      onboarding.stop();
       verifierSnapshots.clear();
     };
   },
