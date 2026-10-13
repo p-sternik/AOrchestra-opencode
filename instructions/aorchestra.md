@@ -55,6 +55,6 @@ a later successful command alone does not restore acceptance. Routine package
 checks and Git inspection use default native allowances. Custom/project rules may
 still ask; respect them rather than changing policy to complete a check.
 
-Before using group delegation, read the bundled [workflow reference](../docs/reference.md#workflow-and-project-aware-verification) for its input and admission rules.
+For group delegation, call `aorchestra_delegate` with a `tasks` array of at least two distinct registered, independent `kind: analysis` task IDs with empty `writePaths`. Each item supplies `taskId`, `model`, `tools` and `routingEvidence`; each task needs its own `handoff` (registered or supplied on its item) and verifiers. Do not combine `tasks` with top-level single-task delegation fields. The whole group must fit available `maxConcurrentAnalyses` slots and delegation/attempt budgets: admission is atomic before children are created; invalid or oversized groups create no children and spend no budget. There is no queue.
 Each analysis still requires fresh primary checks and separate acceptance with
 compatibility review. A group result never accepts its tasks.
