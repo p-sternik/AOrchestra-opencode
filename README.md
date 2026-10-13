@@ -264,14 +264,13 @@ for observed checks and remaining gaps.
 
 ## Documentation and help
 
-| Looking for                              | Read                                      |
-| ---------------------------------------- | ----------------------------------------- |
-| Agent-assisted setup and manual fallback | [Setup guide](docs/setup-for-agents.md)   |
-| Architecture, configuration and limits   | [Technical reference](docs/reference.md)  |
-| Test coverage                            | [Validation](VALIDATION.md)               |
-| Changes between releases                 | [Changelog](CHANGELOG.md)                 |
-| Development, packaging and releases      | [Contributing](CONTRIBUTING.md)           |
-| Automatic npm publication                | [Publisher setup](docs/npm-publishing.md) |
+| Looking for                              | Read                                     |
+| ---------------------------------------- | ---------------------------------------- |
+| Agent-assisted setup and manual fallback | [Setup guide](docs/setup-for-agents.md)  |
+| Architecture, configuration and limits   | [Technical reference](docs/reference.md) |
+| Test coverage                            | [Validation](VALIDATION.md)              |
+| Changes between releases                 | [Changelog](CHANGELOG.md)                |
+| Development, packaging and releases      | [Contributing](CONTRIBUTING.md)          |
 
 Maintained by [Piotr Sternik](https://github.com/p-sternik). For bugs or questions,
 [open an issue](https://github.com/p-sternik/AOrchestra-opencode/issues) with the
