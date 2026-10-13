@@ -24,8 +24,9 @@ The second command invokes paid/provider-backed models and requires a separate
 explicit request. The three-case corpus is smoke coverage, not a representative
 brownfield benchmark. DIRECT versus selective compares strategies; it does not by
 itself compare baseline and candidate harness revisions. Evaluate each revision
-under matched conditions. The current runner leaves whole-workflow cost and tokens
-unknown: do not claim savings until native usage is independently reconciled.
+under matched conditions. The runner now reconciles native whole-workflow usage
+and reports measurement coverage; see the [evaluation reference](../../../docs/reference.md#validation-and-evaluation).
+Do not claim savings when counters, correlation or lifecycle coverage are incomplete.
 
 Recommend **adopt** only when the predefined criteria are met with adequate
 coverage, **reject** for a demonstrated regression or unmet benefit, and

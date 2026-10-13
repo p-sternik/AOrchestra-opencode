@@ -23,13 +23,13 @@ export function supportedRuntime(output: string): boolean {
 export function assertRuntime(output: string): void {
   if (!supportedRuntime(output)) throw new Error(`OpenCode ${OPENCODE_RUNTIME_RANGE} is required; got ${output.trim()}`);
 }
-export async function command(args: string[], cwd: string, timeoutMs = 120_000, env: NodeJS.ProcessEnv = process.env): Promise<string> {
+export async function command(args: string[], cwd: string, timeoutMs = 120_000, env: NodeJS.ProcessEnv = process.env, onStdout?: (chunk: string) => void): Promise<string> {
   return new Promise((resolve, reject) => {
     const child = spawn(binary, args, { cwd, env, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
     let stdout = '', stderr = '';
     let expired = false;
     const timer = setTimeout(() => { expired = true; child.kill(); }, timeoutMs);
-    child.stdout.on('data', data => { stdout += data; });
+    child.stdout.on('data', data => { const chunk = data.toString(); stdout += chunk; onStdout?.(chunk); });
     child.stderr.on('data', data => { stderr += data; });
     child.on('error', error => { clearTimeout(timer); reject(error); });
     child.on('close', code => { clearTimeout(timer); if (expired) reject(new Error('CLI_TIMEOUT')); else if (code !== 0) reject(new Error(`CLI_EXIT_${code}: ${stderr.slice(-3000)}`)); else resolve(stdout); });

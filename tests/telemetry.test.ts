@@ -127,3 +127,50 @@ test('offline report and re-export preserve imported truncation and omit raw sec
     }
   }finally{await rm(directory,{recursive:true,force:true});}
 });
+
+test('workflow usage sums native token categories and deduplicates child sessions',async()=>{
+  const {workflowUsage}=await import('../lib/usage');
+  const f=fixture();await f.metrics.begin('primary',1,count());
+  await f.metrics.child('primary','child','fix','fast',1,'ref');
+  await f.metrics.childFinished('child',{cost:2,input:10,output:20,reasoning:3,cacheRead:4,cacheWrite:5},'failed');
+  await f.metrics.finish('primary','failed',{cost:1,input:2,output:3,reasoning:4,cacheRead:5,cacheWrite:6},[],'end',2);
+  const run=(await f.metrics.page()).runs[0];run.children.push({...run.children[0]});
+  expect(workflowUsage(run)).toEqual({costUSD:3,inputTokens:12,outputTokens:23,reasoningTokens:7,cacheReadTokens:9,cacheWriteTokens:11,totalTokens:62,complete:true,missingSessions:[]});
+  run.children[1].usage={...run.children[1].usage!,cost:8};
+  expect(workflowUsage(run).costUSD).toBe(null);expect(workflowUsage(run).missingSessions).toEqual(['child']);
+});
+
+test('missing tokens remain unknown independently of measured workflow cost',async()=>{
+  const {workflowUsage}=await import('../lib/usage');
+  const f=fixture();await f.metrics.begin('primary',1,count());
+  await f.metrics.finish('primary','succeeded',{...count(),reasoning:null},[],'end',2);
+  const usage=workflowUsage((await f.metrics.page()).runs[0]);
+  expect(usage.costUSD).toBe(0);expect(usage.inputTokens).toBe(0);expect(usage.reasoningTokens).toBe(null);
+  expect(usage.totalTokens).toBe(null);expect(usage.complete).toBe(false);expect(usage.missingSessions).toEqual(['primary']);
+});
+
+test('evaluation reconciliation uses exact native identity and excludes concurrent records',async()=>{
+  const {reconcileEvaluation}=await import('../lib/eval-report');
+  const f=fixture();
+  for(const id of ['first','second']) {
+    await f.metrics.begin(id,1,count());await f.metrics.child(id,`${id}-child`,'fix','fast',1,'ref');
+    await f.metrics.childFinished(`${id}-child`,count(id==='first'?2:100),'failed');
+    await f.metrics.finish(id,'succeeded',count(1),[],'end',2);
+  }
+  const records=(await f.metrics.page()).runs;
+  const family=[{id:'first'},{id:'first-child',parentID:'first'}];
+  const result=reconcileEvaluation('first',[...records,...records],family);
+  expect(result.usage.costUSD).toBe(3);expect(result.complete).toBe(true);
+  expect(reconcileEvaluation('first',[...records,...records],family)).toEqual(result);
+  expect(reconcileEvaluation('first',records,[{id:'first'},{id:'first-child',parentID:'second'}]).usage.costUSD).toBe(null);
+  expect(reconcileEvaluation('first',records,[...family,{id:'untracked',parentID:'first'}]).issues).toContain('unrecorded-native-child:untracked');
+  expect(reconcileEvaluation('missing',records,[]).complete).toBe(false);
+  expect(reconcileEvaluation('first',[...records,{...records.find(r=>r.sessionID==='first')!,id:'new-cycle'}],family).usage.costUSD).toBe(null);
+});
+
+test('evaluation interruptions preserve known usage while preventing complete coverage',async()=>{
+  const {reconcileEvaluation}=await import('../lib/eval-report');
+  const f=fixture();await f.metrics.begin('primary',1,count());await f.metrics.finish('primary','interrupted',count(2),[],'end',2);
+  const result=reconcileEvaluation('primary',(await f.metrics.page()).runs,[{id:'primary'}]);
+  expect(result.usage.costUSD).toBe(2);expect(result.complete).toBe(false);expect(result.issues).toContain('execution-interrupted');
+});

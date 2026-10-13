@@ -1,11 +1,9 @@
 import type { Run } from './telemetry';
 export const route = (run: Run) => run.children.length ? 'delegated' : 'direct';
 export const verified = (run: Run) => run.tasks.length>0 && run.tasks.every(t=>t.status==='complete'&&t.expectedVerifiers>0&&t.observedVerifiers>=t.expectedVerifiers);
-export const workflowEstimate = (run: Run): number | null => {
-  const parent=run.primaryUsage?.cost;
-  if(parent===null||parent===undefined||run.children.some(child=>child.usage?.cost===null||child.usage?.cost===undefined))return null;
-  return parent+run.children.reduce((sum,c)=>sum+c.usage!.cost!,0);
-};
+export { workflowUsage } from './usage';
+import { workflowUsage } from './usage';
+export const workflowEstimate = (run: Run): number | null => workflowUsage(run).costUSD;
 const median=(values:number[])=>{if(!values.length)return null;const v=[...values].sort((a,b)=>a-b),mid=Math.floor(v.length/2);return v.length%2?v[mid]:(v[mid-1]+v[mid])/2;};
 const repeats=(run:Run)=>Object.values(run.inspections).reduce((n,i)=>n+Math.max(0,i.count-1),0);
 export function aggregate(input: Run[], collection: {truncated?: boolean} = {}) {

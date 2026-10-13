@@ -361,9 +361,10 @@ criteria are met, reject demonstrated regressions or missing benefits, and mark
 missing measurements or inadequate comparisons inconclusive. No policy is adopted
 automatically. See the skill's [experiment guidance](../skills/improve/references/experiments.md).
 
-The existing three-case evaluation suite is smoke coverage. Its whole-workflow cost
-and token fields remain unknown, so this PR cannot establish cost savings. Paid
-`eval:run` remains opt-in. There is no new experiment registry, diagnostic service,
+The existing three-case evaluation suite is smoke coverage. Its runner reconciles
+native workflow usage as described [below](#validation-and-evaluation); missing
+measurements remain unknown. Deterministic checks alone cannot establish cost
+savings. Paid `eval:run` remains opt-in. There is no new experiment registry, diagnostic service,
 agent, mandatory runtime phase or self-modification loop.
 
 ## Validation and evaluation
@@ -406,9 +407,51 @@ bun run eval:run -- --strategy=both --repeat=3
 ```
 
 This runs paid/provider-backed inference on three fresh fixture workspaces under
-`work/eval` (override with `--output-dir`). Independent assertions check behavior
-and change scope. The small corpus is a smoke suite, not representative legacy
-evidence. See [VALIDATION.md](../VALIDATION.md) before interpreting results.
+`work/eval` (override with `--output-dir`). Each attempt has a separate native
+OpenCode database, a `workspace` directory, `trajectory.jsonl` and `metrics.json`.
+The database and measurement files live outside the workspace so they do not
+contaminate scope checks. Automatic harness updates are disabled for evaluation.
+The private database does not copy credentials from the normal native database;
+configure provider access through the native configuration/environment for this
+opt-in run. Project and global configuration discovery otherwise remains native.
+
+The runner reads the unique native root session from that attempt's database and
+cross-checks any session IDs emitted by the CLI. It uses exact session/run IDs,
+checks native child ownership against telemetry and rejects multiple primary
+execution cycles or unrecorded descendants. It never correlates by timestamps,
+fixture names or project directories. Partial stdout survives failed CLI exits.
+A missing or ambiguous correlation is an explicit usage issue, not a zero cost.
+Raw native JSONL can contain task/tool content; only metadata is exported to
+`metrics.json`, as in the regular telemetry report.
+
+`report.json` uses evaluation schema **version 2**, retaining `id`, `strategy`,
+`repeat`, assertion/scope results and the existing nullable workflow-cost/token
+fields. It adds session/run references, token categories, usage completeness and
+issues, and per-strategy comparisons. In v2, `durationMs` measures CLI wall time,
+including native startup, and excludes reconciliation and independent assertions.
+`report.md` presents the same strategy summary. DIRECT attempts that delegate are
+failed policy checks; SELECTIVE includes both native DIRECT and delegated work
+chosen under the normal routing policy.
+
+Usage reuses the regular report's workflow calculation: primary execution deltas
+plus each fresh child session once, including failed workers. Missing counters
+remain null independently by category; measured zero stays zero. Native V2
+normalizes output to visible tokens (excluding reasoning) and input to uncached
+tokens, so total tokens sum input, output, reasoning, cache-read and cache-write.
+Costs are native counter estimates, not provider invoices. An interrupted attempt
+can retain known usage but has incomplete lifecycle coverage.
+
+Independent assertions and scope checks determine verified success; telemetry's
+native success alone never proves it. Observed cost sums attempts whose complete
+workflow-cost counters are known, including failed/interrupted attempts; its run
+count is shown alongside full usage coverage. Cost per verified success divides
+the cost of **all** attempts in a strategy by verified successes, only when every
+attempt has complete counters, correlation and lifecycle observations and there
+is at least one success. Otherwise it remains null. No automatic winner or
+percentage-improvement claim is generated.
+
+The small corpus is a smoke suite, not representative legacy evidence. See
+[VALIDATION.md](../VALIDATION.md) before interpreting results.
 
 ## Limits
 
