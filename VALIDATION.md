@@ -262,3 +262,34 @@ online documentation can differ from this tag. Re-run typecheck, tests and nativ
 smoke when changing runtime or API package versions. Runtime and pinned API
 versions may differ within the accepted range; native compatibility must still
 be observed for the installed runtime.
+
+## Evidence-based improvement skill and report coverage
+
+Local Linux checks on 2026-10-13, with Bun 1.2.15 and OpenCode 2.0.26:
+**101 harness/setup/release tests passed (536 assertions)**, plus **13 repo-context
+helper tests**. Typecheck, three-case evaluation corpus validation, version
+consistency, skill frontmatter validation, changed-document local link targets and
+diff checks passed. Package validation included all improvement skill references,
+production installation, plugin import and CLI help.
+
+The repository-profile native smoke check passed with **zero model calls**. It
+checks both bundled skills' paths against the loaded bundle and requires
+`autoinvoke: false`. Native permission requests with an explicit agent verify that
+the primary's shipped policy permits both exact skill IDs, denies unrelated skills,
+and retains executor denial. Setup tests cover exact ordered v0.5.0 default-policy
+migration, idempotency, comments and customized-policy preservation. The user's
+actual global configuration was not changed or tested by this work.
+
+New diagnostics regressions cover mixed measured-zero/unknown costs, failed-worker
+usage, worker ownership, provider versus verifier signals, interruptions and
+observation gaps, the three-run repeated-inspection threshold, secret omission
+from exports/rendering, and imported truncation surviving offline re-export.
+Coverage describes observed records and counters; it does not prove complete native
+event delivery or semantic correctness of untracked tasks.
+
+A primary-agent manual application of the skill reviewed empty, incomplete and
+synthetic repeated-inspection reports, keeping unsupported optimizations and cost
+claims inconclusive. This was an instruction review, not independent model-backed
+skill evaluation. No paid evaluation ran. Windows integration, successful real-model
+skill invocation and effectiveness/cost improvements remain unproven. Whole-workflow
+cost/token integration in the evaluation runner remains a separate change.

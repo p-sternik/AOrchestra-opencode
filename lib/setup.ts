@@ -4,6 +4,7 @@ import { dirname } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { BUNDLED_SKILL_ID } from './core';
 import legacyPermissions from './primary-permissions-v0.json';
+import v050Permissions from './primary-permissions-v050.json';
 
 type RecordValue = Record<string, any>;
 export type Models = { primary: string; fast: string; balanced: string; strong: string };
@@ -13,7 +14,7 @@ const permissionKey = (rules: unknown) => JSON.stringify(rules, (key, value) =>
 export function primaryPermissions(prior: unknown, defaults: unknown): {rules: unknown; customized: boolean} {
   const rules = Array.isArray(prior) ? prior.map(rule => rule?.action === 'skill' && rule.resource === 'repo-context' && rule.effect === 'allow'
     ? {...rule, resource: BUNDLED_SKILL_ID} : rule) : prior;
-  if (rules === undefined || permissionKey(rules) === permissionKey(legacyPermissions)) return {rules: defaults, customized: false};
+  if (rules === undefined || [legacyPermissions, v050Permissions].some(defaults => permissionKey(rules) === permissionKey(defaults))) return {rules: defaults, customized: false};
   return {rules, customized: permissionKey(rules) !== permissionKey(defaults)};
 }
 export async function setupPackage(version: string, explicit: string | undefined, channel: string | undefined, mainRevision: () => Promise<string>): Promise<string> {

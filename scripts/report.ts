@@ -14,7 +14,7 @@ const input=option('input');
 if(input){
   const data=JSON.parse(await readFile(resolve(input),'utf8'));
   if(data.version!==1||!Array.isArray(data.runs)||data.runs.some((r:Run)=>r.version!==1||typeof r.id!=='string'||typeof r.sessionID!=='string'||!Array.isArray(r.tasks)||!Array.isArray(r.children)||!r.inspections||!r.models||!r.tools))throw new Error('Invalid metrics dataset');
-  runs=data.runs.slice(0,limit);truncated=data.runs.length>limit;
+  runs=data.runs.slice(0,limit);truncated=data.truncated===true||data.runs.length>limit;
 }else{
   let close=async()=>{};
   const server=option('server');
@@ -45,10 +45,10 @@ if(input){
     }while(cursor);
   }finally{if(bootstrap)await client.session.remove({sessionID:bootstrap}).catch(()=>{});await close();}
 }
-const report=aggregate(runs);
+const report=aggregate(runs,{truncated});
 const destination=resolve(option('output')??resolve(root,'work/report.md'));
 await mkdir(dirname(destination),{recursive:true});
-await writeFile(destination,markdown(report)+(truncated?'\nCollection was capped by --limit; coverage is partial.\n':''));
+await writeFile(destination,markdown(report));
 const exported=option('export');
 if(exported){const file=resolve(exported);await mkdir(dirname(file),{recursive:true});await writeFile(file,JSON.stringify({version:1,runs:report.runs,truncated},null,2)+'\n');}
-console.log(JSON.stringify({report:destination,runs:report.totalRuns,closed:report.closedRuns,unfinished:report.unfinishedRuns,hypotheses:report.hypotheses.length,truncated,policyChanged:false,modelCalls:0}));
+console.log(JSON.stringify({report:destination,runs:report.totalRuns,closed:report.closedRuns,unfinished:report.unfinishedRuns,hypotheses:report.hypotheses.length,coverage:report.coverage,truncated,policyChanged:false,modelCalls:0}));

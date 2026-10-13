@@ -15,7 +15,7 @@ const parsed=JSON.parse(packOutput);
 const packed=Array.isArray(parsed)?parsed[0]:(parsed.files?parsed:parsed[pkg.name]);
 if(!packed?.files)throw new Error(`PACK_OUTPUT_INVALID: ${packOutput.slice(0,500)}`);
 const names=new Set(packed.files.map((file:any)=>file.path));
-for(const path of ['bin/aorchestra.mjs','scripts/cli.ts','scripts/update.ts','lib/update.ts','lib/version-status.ts','plugins/aorchestra.ts','plugins/aorchestra-tui.tsx','plugins/aorchestra/tui.ts','instructions/aorchestra.md','skills/repo-context/SKILL.md'])if(!names.has(path))throw new Error(`PACKAGED_ASSET_MISSING: ${path}`);
+for(const path of ['bin/aorchestra.mjs','scripts/cli.ts','scripts/update.ts','lib/update.ts','lib/version-status.ts','plugins/aorchestra.ts','plugins/aorchestra-tui.tsx','plugins/aorchestra/tui.ts','instructions/aorchestra.md','skills/repo-context/SKILL.md','skills/improve/SKILL.md','skills/improve/references/diagnosis.md','skills/improve/references/experiments.md'])if(!names.has(path))throw new Error(`PACKAGED_ASSET_MISSING: ${path}`);
 if([...names].some(name=>String(name).startsWith('work/')||String(name).startsWith('node_modules/')))throw new Error('UNEXPECTED_PACKAGED_ARTIFACT');
 const consumer=join(scratch,'consumer');await mkdir(consumer,{recursive:true});
 await run(['install','--prefix',consumer,join(scratch,packed.filename),'--ignore-scripts','--omit=dev','--no-audit','--no-fund']);

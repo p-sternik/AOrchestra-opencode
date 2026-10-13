@@ -27,6 +27,7 @@
     "scripts/report.ts",
     "instructions",
     "skills/repo-context",
+    "skills/improve",
     "opencode.json",
     "README.md",
     "docs",

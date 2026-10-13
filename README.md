@@ -209,7 +209,7 @@ The bundled skill has the native ID `aorchestra-repo-context`, preventing a coll
 with a separately installed `repo-context`. It reuses existing docs and preserves
 authored AGENTS.md rules. Ordinary coding does not require a documentation phase.
 Other agents retain normal skill discovery; AOrchestra's main agent permits only
-its bundled skill by default.
+its bundled repo-context and improvement skills by default.
 
 ## How it works
 
@@ -280,3 +280,26 @@ Release Please prepares version/changelog PRs and automatically merges them afte
 Windows/Linux validation, then publishes a Git tag and GitHub Release. npm
 publication runs in the release workflow after the owner
 configures Trusted Publishing and enables its repository variable.
+
+## Evidence-based harness improvement
+
+Invoke the bundled `aorchestra-improve` skill explicitly with a report or an
+identified project and native database:
+
+```text
+Use aorchestra-improve to analyze /path/to/report.md. Identify up to three
+evidence-backed bottlenecks, locate the matching harness implementation,
+propose the smallest change and define validation criteria. Do not modify
+the harness.
+```
+
+The skill separates observations from hypotheses and can report insufficient data.
+It does not run during ordinary programming, change the harness or launch paid
+experiments. Reports expose observed terminal, interrupted, unfinished and cost
+coverage; measured-record sums exclude unknown costs. A repeated inspection may
+be necessary, and native success does not establish semantic correctness.
+
+Follow the [improvement process](docs/reference.md#reviewing-harness-improvements)
+for matched evaluation and reviewed adoption. Existing custom skill permissions
+remain intact; users with a customized deny policy may need an explicit
+`skill` allow rule for `aorchestra-improve` on the primary agent.

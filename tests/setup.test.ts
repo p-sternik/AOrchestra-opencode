@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { mergeSetup, readConfig, saveConfig, isAOrchestraTarget, globalEnvironment, setupPackage, assertSetupVersion, primaryPermissions } from '../lib/setup';
 import shippedTemplate from '../opencode.json';
 import oldPermissions from '../lib/primary-permissions-v0.json';
+import v050Permissions from '../lib/primary-permissions-v050.json';
 import { removeTemporary, supportedRuntime, assertRuntime } from '../scripts/runtime';
 test('runtime compatibility accepts newer stable V2 releases and rejects unsupported versions',()=>{
   for(const version of ['2.0.26','2.0.27','2.1.0','2.99.99','v2.0.26','opencode 2.1.0\n','opencode2 2.1.0','2.0.26+build.1']) {
@@ -89,4 +90,16 @@ test('config write backs up exact bytes, changes atomically and rejects concurre
     await expect(saveConfig(path,'{}','{"x":2}')).rejects.toThrow('CONFIG_CHANGED_DURING_SETUP');
     expect((await saveConfig(path,'{"x":1}','{"x":1}')).changed).toBe(false);
   } finally {await removeTemporary(root,'aorchestra-setup-test-');}
+});
+
+test('setup upgrades exact v0.5.0 defaults and preserves custom improvement skill policies',()=>{
+  const before='// preserved\n'+JSON.stringify({agents:{aorchestra:{permissions:v050Permissions}}});
+  const after=mergeSetup(before,shippedTemplate,'aorchestra-opencode-v2@1.2.3',models);
+  expect(readConfig(after).agents.aorchestra.permissions).toEqual(shippedTemplate.agents.aorchestra.permissions);
+  expect(after).toContain('// preserved');
+  expect(mergeSetup(after,shippedTemplate,'aorchestra-opencode-v2@1.2.3',models)).toBe(after);
+  for(const prior of [v050Permissions.slice().reverse(),[...v050Permissions,{action:'skill',resource:'aorchestra-improve',effect:'deny'}],[]]) {
+    const result=primaryPermissions(prior,shippedTemplate.agents.aorchestra.permissions);
+    expect(result.rules).toEqual(prior);expect(result.customized).toBe(true);
+  }
 });

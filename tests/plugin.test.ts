@@ -360,3 +360,17 @@ test('a late native child result cannot restore review after dependency evidence
     expect((await f.ctx.storage.get('child/child-1') as any).active).toBe(false);
   }finally{release();await f.clean();}
 });
+
+test('bundled improvement skill is explicit-only and unrelated agents cannot invoke it',async()=>{
+  const f=await fixture();try{
+    const skill=f.skills.find(s=>s.id==='aorchestra-improve');
+    expect(skill.autoinvoke).toBe(false);expect(skill.path).toContain('improve');
+    expect(skill.content.startsWith('---')).toBe(false);
+    for(const agent of ['build','plan','research','custom-agent']) {
+      const permission={agent,sessionID:'other',action:'skill',resources:['aorchestra-improve'],effect:'allow'};
+      await f.hooks.get('permission:evaluate')!(permission);expect(permission.effect).toBe('deny');
+    }
+    const permission={agent:'aorchestra',sessionID:'primary',action:'skill',resources:['aorchestra-improve'],effect:'allow'};
+    await f.hooks.get('permission:evaluate')!(permission);expect(permission.effect).toBe('allow');
+  }finally{await f.clean();}
+});

@@ -26,6 +26,7 @@
         { "action": "question", "resource": "*", "effect": "allow" },
         { "action": "skill", "resource": "*", "effect": "deny" },
         { "action": "skill", "resource": "aorchestra-repo-context", "effect": "allow" },
+        { "action": "skill", "resource": "aorchestra-improve", "effect": "allow" },
         { "action": "aorchestra_task", "resource": "*", "effect": "allow" },
         { "action": "aorchestra_delegate", "resource": "*", "effect": "allow" },
         { "action": "subagent", "resource": "*", "effect": "deny" },
