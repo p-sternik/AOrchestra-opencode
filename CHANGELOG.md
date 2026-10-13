@@ -3,6 +3,13 @@
 Release Please maintains future entries from Conventional Commits. Earlier local
 iterations are described below for context; they are not historical Git tags.
 
+## [0.6.0](https://github.com/p-sternik/AOrchestra-opencode/compare/0.5.0...0.6.0) (2026-10-13)
+
+
+### Features
+
+* add improvement diagnostics and restore packaged TUI ([#14](https://github.com/p-sternik/AOrchestra-opencode/issues/14)) ([efd40a0](https://github.com/p-sternik/AOrchestra-opencode/commit/efd40a001697255340431ec432b14d23ffe57bdc))
+
 ## [0.5.0](https://github.com/p-sternik/AOrchestra-opencode/compare/0.4.3...0.5.0) (2026-10-12)
 
 
