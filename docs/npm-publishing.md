@@ -30,13 +30,13 @@ package is `aorchestra-opencode-v2`.
 Open the package's Settings → Trusted Publisher on npmjs.com and choose GitHub
 Actions. Enter these exact values:
 
-| Field | Value |
-| --- | --- |
-| Organization/user | p-sternik |
-| Repository | AOrchestra-opencode |
-| Workflow filename | release.yml |
-| Environment | Leave blank; this job uses no GitHub environment |
-| Allowed operation | Enable direct npm publish |
+| Field             | Value                                            |
+| ----------------- | ------------------------------------------------ |
+| Organization/user | p-sternik                                        |
+| Repository        | AOrchestra-opencode                              |
+| Workflow filename | release.yml                                      |
+| Environment       | Leave blank; this job uses no GitHub environment |
+| Allowed operation | Enable direct npm publish                        |
 
 Save. New configurations initially allow staged publishing; direct publishing must
 be enabled for this workflow. npm requires the first successful trusted publish

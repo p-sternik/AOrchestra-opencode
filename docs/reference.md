@@ -185,21 +185,97 @@ not a formal semantic proof. Failed work is not automatically rolled back.
 
 ## Workflow and project-aware verification
 
-Task metadata uses the existing v1 ledger with optional `workflow` and
-`verification` fields. Older tasks acquire phases without losing their baseline,
-attempt history, receipts or delegation budget. Registration starts at `discover`
+Task metadata uses the existing v1 ledger with optional `workflow`,
+`verification` and `verificationEpoch` fields. Older tasks acquire phases without
+losing their baseline, attempt history, receipts or delegation budget. Registration starts at `discover`
 and records a transition to `plan`; start/delegation enters `execute`. Native
 verification outcomes or `task verify` enter `verify`. Only acceptance, with fresh
 predicates, write-scope validation and compatibility review, enters `complete`.
 Failures/interruption can enter `blocked`. These phases describe control state,
 not a model-generated architecture plan or proof of discovery completeness.
 
-| Operation | Behavior |
-| --- | --- |
-| `plan` | Refresh project checks before starting; no commands run |
-| `verify` | Select checks for baseline-to-current affected paths, enter verification |
-| `repair` | Require an evidence-based `reason`, clear receipts, consume one repair cycle |
-| `resume` | Read current phase, budgets, `pendingVerifiers`, observations and plan freshness |
+Independent `kind: analysis` tasks with empty `writePaths` may coexist in
+`running` or `review`. Their contracts and `dependsOn` express independence; the
+harness does not infer it from topics. `maxConcurrentAnalyses` is a positive
+integer, default **1**, per primary session. Parallel execution is opt-in: configure
+2 or 3 after validating the target provider's concurrent lifecycle. Existing explicit
+overrides are preserved by setup. Only `running` analyses consume slots,
+including DIRECT work, reserved delegations and repair. Planning and verification
+remain possible at capacity. Review releases a running slot but still blocks
+exclusive work and primary native edits. Accept analyses individually after fresh
+checks and an explicit compatibility review, including while peers run.
+
+Change and verification tasks remain exclusive through acceptance, even for
+disjoint paths. Before switching from invalidated/recovered work, inspect retained
+changes. Recovery blocks unfinished attempts before native calls, revokes their
+contracts and attempts to interrupt every child even when one call fails.
+`RECOVERY_INCOMPLETE` reports storage or interruption failures after all calls
+settle; inspect the native child sessions because failed interruption does not
+establish that execution stopped. Unrelated analyses
+are not revoked by a sibling's failure. Native edit denial and whole-tree snapshot
+checks do not establish filesystem isolation; avoid repository mutations through
+shell or external tools during analysis. Cross-session workspace locking and
+parallel writers are outside this scheduler.
+
+Use a separate worktree for each independent primary session and keep other writers
+out of that worktree during verification. This reduces accidental interference;
+worktrees and native permissions are not process isolation.
+
+Task responses expose `nextAction` with a reason and a suggested native tool call
+when one is applicable. Placeholders in repair reasons and compatibility reviews
+must be replaced with observed evidence. Capacity, dependency and exhausted-budget
+blocks report why execution cannot proceed. Task-operation errors retain their error
+code and add the task ID and recovery guidance. `resume` lists pending predicates;
+checks interrupted by plugin restart need a new observed before/after pair. Guidance
+does not execute operations or reset budgets, receipts or acceptance rules.
+
+Status also returns `tokenBudget` (limit, consumed, remaining and nearLimit) for the
+primary native session. At 80% of the limit, primary and executor context hooks add
+a warning before model dispatch. All native token categories count; absent counters
+keep consumed/remaining/nearLimit unknown rather than inventing zero. This remains
+a per-session safeguard, not a whole-workflow cost cap.
+
+The existing single-task delegate input/result is unchanged. For a group, supply
+at least two unique registered analysis IDs with their usual routing fields.
+This two-task example requires plugin option `maxConcurrentAnalyses: 2` or greater:
+
+```json
+{
+  "tasks": [
+    {
+      "taskId": "callers",
+      "model": "balanced",
+      "tools": ["read"],
+      "routingEvidence": "Independent caller analysis"
+    },
+    {
+      "taskId": "compatibility",
+      "model": "strong",
+      "tools": ["read"],
+      "routingEvidence": "Independent compatibility analysis"
+    }
+  ]
+}
+```
+
+Each task needs its bounded source handoff, either registered or on its item.
+Group and single-task fields are mutually exclusive. Admission validates all
+members and reserves all attempts atomically against one source snapshot before
+creating children. Invalid or oversized groups spend no budget and create no
+children; there is no queue. Children run concurrently with separate permissions,
+timeouts and evidence. The group waits for all to settle and returns `{results}`
+in input order, each containing `content`, identity/attempt metadata and
+`accepted: false`, plus `error` for a failure. A child failure leaves siblings
+running; parent cancellation interrupts all outstanding children. A matching
+primary check can attest to multiple tasks using their separate verification
+epochs, while child checks remain scoped to their own task.
+
+| Operation | Behavior                                                                         |
+| --------- | -------------------------------------------------------------------------------- |
+| `plan`    | Refresh project checks before starting; no commands run                          |
+| `verify`  | Select checks for baseline-to-current affected paths, enter verification         |
+| `repair`  | Require an evidence-based `reason`, clear receipts, consume one repair cycle     |
+| `resume`  | Read current phase, budgets, `pendingVerifiers`, observations and plan freshness |
 
 Registration selects checks from declared write paths; delegation refreshes them
 from actual affected paths on return. DIRECT work calls `verify` after edits.
@@ -210,6 +286,9 @@ an explicit action that interrupts stale children and preserves their files.
 Invalidation resets plan/baseline and dependent tasks, retaining repair counters
 and any pending repair requirement. After a failed matching verifier, `recover`,
 `plan`, `start`, delegation and plugin restart cannot replace bounded repair.
+Acceptance also rejects a pending repair requirement, even if a later matching
+command passes. Enter repair with an evidence-based reason, then rerun the checks;
+receipts collected before repair are cleared.
 If invalidation removed the baseline, entering repair records a new one and
 consumes the same durable repair budget.
 
@@ -272,6 +351,24 @@ primary's native tool call and normal permission evaluation. OpenCode 2.0.26's
 plugin tool domain has no permission-preserving dispatch API; calling a tool's raw
 `execute` or a host subprocess would bypass that boundary, so this controller does
 neither. It does not promise unattended end-to-end execution or automatic repairs.
+Each matching verifier captures a source snapshot in the native `execute.before`
+hook and compares it with the snapshot in `execute.after`, using its session and
+call IDs. A passing result grants a receipt only when both snapshots match and
+the task's verification epoch is unchanged. Resetting receipts for execution,
+repair, invalidation, recovery, native edits or accepted-evidence revocation
+advances the durable epoch. Checks started in an earlier epoch are ignored by
+the acceptance controller and verifier counters; their native tool events remain
+in telemetry. An old result cannot grant a receipt, consume another repair cycle
+or revoke newly accepted evidence, even when sources are identical. Existing
+tasks without an epoch use zero until their evidence is reset.
+Changed sources during an attributed check make the result unverifiable, revoke
+its receipt and require bounded repair. A callback without a matching before
+observation cannot grant or revoke evidence, add verifier observations or require
+repair: its task and epoch ownership are unknown. In-flight snapshot observations
+are local to the loaded plugin; checks spanning a restart must be rerun to provide
+new evidence. Unpaired callbacks leave fresh evidence collected afterward intact. Comparing
+snapshots does not detect a transient edit that is reverted before the after
+snapshot, and it does not lock the filesystem against other processes.
 A failed matching rerun revokes any earlier successful receipt, including on an
 unchanged snapshot. After acceptance, a failed or unverifiable matching rerun
 blocks the completed task and all transitive dependents, clears their receipts and
@@ -285,6 +382,14 @@ Status/context freshness uses the existing whole-tree snapshot provider. This
 adds snapshot work during tracked verification and has not been benchmarked on
 large repositories; incremental snapshots remain a separate change. Untracked
 DIRECT work retains native behavior and has no new semantic acceptance claim.
+
+Task status includes plugin-local `snapshotDiagnostics`: scan count, total and last
+duration in milliseconds, last successful file/symlink count, and failure count.
+These cover all owners in the loaded plugin and reset on plugin restart; they are
+not persisted telemetry or per-task timings. Every scan still hashes current sources.
+Measure representative projects before changing exclusions. `snapshotIgnore` matches
+basenames throughout the tree, so exclude only confirmed generated directories;
+excluding source directories weakens freshness coverage.
 
 ## Repository context
 
@@ -377,6 +482,7 @@ agent, mandatory runtime phase or self-modification loop.
 ## Validation and evaluation
 
 ```sh
+npm run format:check
 bun run typecheck
 bun run test
 python -m unittest discover -s tests -p '*_test.py'
@@ -384,6 +490,13 @@ bun run eval:check
 bun scripts/version-check.ts
 npm run pack:check
 bun run check
+```
+
+If the CLI on PATH is a broken wrapper or belongs to another platform, select a
+working native executable explicitly without changing global configuration:
+
+```sh
+OPENCODE_BIN=/absolute/path/to/opencode bun run check
 ```
 
 The native smoke check accepts stable OpenCode >=2.0.26 <3.0.0 runtimes.
@@ -468,6 +581,9 @@ The small corpus is a smoke suite, not representative legacy evidence. See
 - Default budgets: eight delegations per primary session, two attempts per task,
   two repair cycles per task, ten minutes per delegation and 300k reported tokens per native session. These
   are safeguards, not measured optimal thresholds or a hard whole-ticket dollar cap.
+  The session-token limit uses the same total as usage reports: uncached input,
+  visible output, reasoning, cache-read and cache-write. It is checked before the
+  next model dispatch for both primary and executor; one response can cross it.
 - Source snapshots include untracked files, do not traverse symlinks and exclude
   secrets, `.git`, `.opencode`, `node_modules`, `.cache`, plus root `coverage`,
   `dist` and `build`. Those root exclusions can hide meaningful files in unusual

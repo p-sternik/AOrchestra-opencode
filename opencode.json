@@ -4,16 +4,29 @@
   "model": "github-copilot/gpt-5.6-terra",
   "plugins": [
     "*",
-    { "package": "./plugins/aorchestra", "options": {
-      "models": { "fast": "github-copilot/gpt-5.6-luna", "balanced": "github-copilot/gpt-5.6-terra", "strong": "github-copilot/gpt-5.6-sol" },
-      "maxDelegations": 8, "maxAttempts": 2, "timeoutMs": 600000,
-      "maxSessionTokens": 300000, "snapshotIgnore": [], "telemetry": true
-    } }
+    {
+      "package": "./plugins/aorchestra",
+      "options": {
+        "models": {
+          "fast": "github-copilot/gpt-5.6-luna",
+          "balanced": "github-copilot/gpt-5.6-terra",
+          "strong": "github-copilot/gpt-5.6-sol"
+        },
+        "maxConcurrentAnalyses": 1,
+        "maxDelegations": 8,
+        "maxAttempts": 2,
+        "timeoutMs": 600000,
+        "maxSessionTokens": 300000,
+        "snapshotIgnore": [],
+        "telemetry": true
+      }
+    }
   ],
   "agents": {
     "aorchestra": {
       "description": "Own brownfield outcomes, perform cohesive work directly, delegate settled bounded tasks.",
-      "mode": "primary", "steps": 30,
+      "mode": "primary",
+      "steps": 30,
       "system": "{file:./instructions/aorchestra.md}",
       "permissions": [
         { "action": "*", "resource": "*", "effect": "ask" },
@@ -35,39 +48,40 @@
         { "action": "read", "resource": "*.pem", "effect": "deny" },
         { "action": "edit", "resource": ".opencode/*", "effect": "ask" },
         { "action": "shell", "resource": "*", "effect": "ask" },
-        {"action": "shell", "resource": "npm run typecheck", "effect": "allow"},
-        {"action": "shell", "resource": "npm run lint", "effect": "allow"},
-        {"action": "shell", "resource": "npm run test", "effect": "allow"},
-        {"action": "shell", "resource": "pnpm run typecheck", "effect": "allow"},
-        {"action": "shell", "resource": "pnpm run lint", "effect": "allow"},
-        {"action": "shell", "resource": "pnpm run test", "effect": "allow"},
-        {"action": "shell", "resource": "yarn run typecheck", "effect": "allow"},
-        {"action": "shell", "resource": "yarn run lint", "effect": "allow"},
-        {"action": "shell", "resource": "yarn run test", "effect": "allow"},
-        {"action": "shell", "resource": "bun run typecheck", "effect": "allow"},
-        {"action": "shell", "resource": "bun run lint", "effect": "allow"},
-        {"action": "shell", "resource": "bun run test", "effect": "allow"},
-        {"action": "shell", "resource": "bun test", "effect": "allow"},
-        {"action": "shell", "resource": "bun test *", "effect": "allow"},
-        {"action": "shell", "resource": "git status", "effect": "allow"},
-        {"action": "shell", "resource": "git status *", "effect": "allow"},
-        {"action": "shell", "resource": "git diff", "effect": "allow"},
-        {"action": "shell", "resource": "git diff *", "effect": "allow"},
-        {"action": "shell", "resource": "git log", "effect": "allow"},
-        {"action": "shell", "resource": "git log *", "effect": "allow"},
-        {"action": "shell", "resource": "git show", "effect": "allow"},
-        {"action": "shell", "resource": "git show *", "effect": "allow"},
-        {"action": "shell", "resource": "git rev-parse", "effect": "allow"},
-        {"action": "shell", "resource": "git rev-parse *", "effect": "allow"},
+        { "action": "shell", "resource": "npm run typecheck", "effect": "allow" },
+        { "action": "shell", "resource": "npm run lint", "effect": "allow" },
+        { "action": "shell", "resource": "npm run test", "effect": "allow" },
+        { "action": "shell", "resource": "pnpm run typecheck", "effect": "allow" },
+        { "action": "shell", "resource": "pnpm run lint", "effect": "allow" },
+        { "action": "shell", "resource": "pnpm run test", "effect": "allow" },
+        { "action": "shell", "resource": "yarn run typecheck", "effect": "allow" },
+        { "action": "shell", "resource": "yarn run lint", "effect": "allow" },
+        { "action": "shell", "resource": "yarn run test", "effect": "allow" },
+        { "action": "shell", "resource": "bun run typecheck", "effect": "allow" },
+        { "action": "shell", "resource": "bun run lint", "effect": "allow" },
+        { "action": "shell", "resource": "bun run test", "effect": "allow" },
+        { "action": "shell", "resource": "bun test", "effect": "allow" },
+        { "action": "shell", "resource": "bun test *", "effect": "allow" },
+        { "action": "shell", "resource": "git status", "effect": "allow" },
+        { "action": "shell", "resource": "git status *", "effect": "allow" },
+        { "action": "shell", "resource": "git diff", "effect": "allow" },
+        { "action": "shell", "resource": "git diff *", "effect": "allow" },
+        { "action": "shell", "resource": "git log", "effect": "allow" },
+        { "action": "shell", "resource": "git log *", "effect": "allow" },
+        { "action": "shell", "resource": "git show", "effect": "allow" },
+        { "action": "shell", "resource": "git show *", "effect": "allow" },
+        { "action": "shell", "resource": "git rev-parse", "effect": "allow" },
+        { "action": "shell", "resource": "git rev-parse *", "effect": "allow" },
         { "action": "shell", "resource": "git push *", "effect": "deny" },
         { "action": "external_directory", "resource": "*", "effect": "ask" }
       ]
     },
     "aorchestra-executor": {
       "description": "Run a persisted, bounded AOrchestra contract. Native session permissions specify its capabilities.",
-      "mode": "subagent", "steps": 24,
+      "mode": "subagent",
+      "steps": 24,
       "system": "{file:./instructions/aorchestra-executor.md}",
-      "permissions": [ { "action": "*", "resource": "*", "effect": "deny" } ]
+      "permissions": [{ "action": "*", "resource": "*", "effect": "deny" }]
     }
   },
   "tool_output": { "max_lines": 300, "max_bytes": 12000 },

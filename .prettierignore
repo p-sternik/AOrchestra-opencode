@@ -1,0 +1,19 @@
+# Dependencies and generated artifacts
+node_modules/
+work/
+.opencode/
+.cache/
+coverage/
+dist/
+build/
+__pycache__/
+*.pyc
+*.log
+*.tgz
+*.db
+*.db-shm
+*.db-wal
+
+# Local credentials
+.env
+.env.*

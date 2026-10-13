@@ -4,8 +4,14 @@ const root = new URL('../', import.meta.url);
 const pkg = await Bun.file(new URL('package.json', root)).json();
 const lock = await Bun.file(new URL('package-lock.json', root)).json();
 const manifest = await Bun.file(new URL('.release-please-manifest.json', root)).json();
-const versions = [pkg.version, lock.version, lock.packages[''].version, manifest['.'], HARNESS_VERSION];
-if (!/^\d+\.\d+\.\d+$/.test(pkg.version) || versions.some(version => version !== pkg.version)) {
+const versions = [
+  pkg.version,
+  lock.version,
+  lock.packages[''].version,
+  manifest['.'],
+  HARNESS_VERSION,
+];
+if (!/^\d+\.\d+\.\d+$/.test(pkg.version) || versions.some((version) => version !== pkg.version)) {
   throw new Error(`Version mismatch: ${JSON.stringify(versions)}`);
 }
 const changelog = await Bun.file(new URL('CHANGELOG.md', root)).text();

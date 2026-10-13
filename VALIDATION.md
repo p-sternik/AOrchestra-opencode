@@ -2,18 +2,18 @@
 
 Baseline: 0.2.2, reviewed on 2026-10-11 using Windows, Bun 1.2.15 and OpenCode 2.0.26.
 
-| Check | Baseline result |
-| --- | --- |
-| Official @opencode/plugin/client 2.0.26 types | Passed |
-| Core, filesystem, plugin, telemetry and report tests | 39 passed, 104 assertions |
-| Repo-context helper preservation/freshness tests | 13 passed |
-| Evaluation corpus validation | Three cases; DIRECT and selective strategies |
-| Native plugin/agent/session/permission loading | Passed |
-| Central profile used from another project | Passed |
-| Bundled explicit-only repo-context discovery | Passed |
-| Controlled missing-provider terminal event → telemetry → RPC | Passed; zero model calls |
-| Native and offline metadata reporting | Passed |
-| Representative real-model effectiveness/cost benchmark | Not performed |
+| Check                                                        | Baseline result                              |
+| ------------------------------------------------------------ | -------------------------------------------- |
+| Official @opencode/plugin/client 2.0.26 types                | Passed                                       |
+| Core, filesystem, plugin, telemetry and report tests         | 39 passed, 104 assertions                    |
+| Repo-context helper preservation/freshness tests             | 13 passed                                    |
+| Evaluation corpus validation                                 | Three cases; DIRECT and selective strategies |
+| Native plugin/agent/session/permission loading               | Passed                                       |
+| Central profile used from another project                    | Passed                                       |
+| Bundled explicit-only repo-context discovery                 | Passed                                       |
+| Controlled missing-provider terminal event → telemetry → RPC | Passed; zero model calls                     |
+| Native and offline metadata reporting                        | Passed                                       |
+| Representative real-model effectiveness/cost benchmark       | Not performed                                |
 
 The repository adds deterministic Windows/Linux CI and version consistency checks.
 Check the actual Actions run for current CI results; local baseline results do not
@@ -401,3 +401,146 @@ records. These are controlled regression checks, not provider-backed evidence of
 effectiveness, cost savings or arbitrary process isolation. Windows checks and
 successful model-backed evaluation remain target-environment work; no paid
 evaluation ran.
+
+## Verification snapshot pairs and pending repair acceptance
+
+Local Linux checks on 2026-10-13 with Bun 1.2.15, based on main v0.7.0:
+typecheck and **124 harness tests (705 assertions)** passed. The OpenCode 2.0.26
+repository-profile smoke check passed with **zero model calls**. Diff and changed
+documentation link checks passed.
+
+Controller regressions cover a passing verifier whose source files change between
+the native before/after hooks, overlapping call IDs, a missing before observation,
+an in-flight check spanning plugin restart and revocation of accepted evidence
+after a source mutation during its rerun. The failure-then-success regression now
+requires entering bounded repair before acceptance; repair clears earlier receipts
+and consumes the durable repair budget before fresh checks can accept the task.
+
+These are controlled plugin-hook regressions. The native smoke establishes plugin
+loading and the existing no-inference integration, not a successful model-driven
+repair loop. Snapshot comparison does not detect transient changes reverted before
+the after observation or establish filesystem isolation. Added snapshot overhead
+on large trees, Windows integration and provider-backed effectiveness remain
+unmeasured. No paid evaluation ran.
+
+## Verification epochs, review ownership and token budgets
+
+Local Linux checks on 2026-10-13 with Bun 1.2.15, based on main v0.7.0:
+typecheck, **129 harness tests (745 assertions)**, **13 repo-context helper tests**,
+three-case evaluation corpus validation, version consistency, production package
+installation/import/CLI/TUI rendering and diff checks passed. The OpenCode 2.0.26
+repository-profile smoke check passed with **zero model calls**.
+
+Regressions reject passing checks started before repair, invalidation or recovery,
+even with identical source snapshots. A late failure from the previous repair
+epoch cannot revoke fresh acceptance or add a current verifier failure. Existing
+v1 tasks without an epoch remain readable. Tests also reject both overlapping and
+disjoint task execution while another task awaits review, without creating a child
+or spending delegation budget, and permit the next task after acceptance. Native
+edits reject ambiguous ownership in older concurrent running/review state.
+
+Primary and executor token-budget tests cover below-limit and at-limit totals,
+including separate cache-read/cache-write and reasoning tokens. Budget enforcement
+and reporting share the native token-category sum; missing usage remains unknown.
+
+These are controlled hook regressions and a no-inference loading smoke check.
+Successful provider-backed repair loops, Windows integration and large-repository
+snapshot overhead remain unmeasured. No paid evaluation or release ran.
+
+## Parallel independent analyses
+
+Local Linux checks on 2026-10-13 with Bun 1.2.15 and pinned API 2.0.26:
+typecheck, **140 harness tests (861 assertions)**, **13 repo-context helper tests**,
+three-case evaluation corpus validation, version consistency and production
+package installation/import/CLI/TUI rendering passed. The OpenCode 2.0.26
+repository-profile smoke passed with **zero model calls**, creating three native
+children concurrently under one parent and checking persisted ownership and
+read-only session permission rules. These native children did not dispatch tools
+or execute model prompts; full group execution is covered by controlled plugin
+fixtures, not a provider-backed native run.
+
+Controlled session waits prove three analysis children reach execution before
+any completes. Regressions cover capacity for delegation and DIRECT start,
+review slot release, bounded repair admission, same-task overlap, individual
+acceptance while peers run, exclusive change/verification in both directions,
+and atomic rejection without children or budget for invalid group contracts,
+dependencies, tools, handoffs, retry rules and exhausted budgets. They also cover
+mixed success/failure with separate child usage records, timeout, parent
+cancellation, owner switch, restart/recovery and late callbacks. Child evidence
+stays task-scoped; primary evidence uses each task's separate verification epoch.
+External mutations block fresh acceptance, and primary native edits are denied
+through running/review analysis states. Setup retains existing limit overrides.
+
+The limit is per primary session. Cross-session workspace locking, parallel
+writers, transient mutations reverted between snapshots, Windows native execution,
+large-tree snapshot overhead and successful provider-backed concurrent analysis
+remain untested. Contracts and dependencies declare independence; these results
+do not prove semantic independence, filesystem isolation, effectiveness or cost
+savings. No paid evaluation or release ran.
+
+## Concurrent recovery and unattributed verifier callbacks
+
+Local Linux checks on 2026-10-13 with Bun 1.2.15: typecheck and
+**142 harness tests (895 assertions)** passed. The OpenCode 2.0.26
+repository-profile smoke passed with **zero model calls**, including three native
+read-only child sessions. Diff and changed-document link checks passed.
+
+Controlled regressions make the first child interruption or contract-storage
+write fail. Recovery blocks attempts before native calls, attempts every contract
+revocation and interruption, and reports incomplete cleanup after all calls
+settle. Late child completions preserve recovered state. Another regression
+delivers passing and failing checks started before task execution, unpaired
+callbacks and callbacks spanning plugin restart after fresh acceptance; none
+revokes current evidence. Unpaired checks cannot grant receipts, and a fresh
+paired check remains necessary before acceptance.
+
+These tests establish controller behavior under controlled failures. An incomplete
+recovery does not prove that native child execution stopped. Successful
+provider-backed concurrent delegation, Windows integration and filesystem
+isolation remain unverified. No paid evaluation or release ran.
+
+## Conservative defaults and recovery diagnostics
+
+Local Linux checks on 2026-10-13 with Bun 1.2.15: typecheck and
+**147 harness tests (923 assertions)** passed, along with **13 repo-context helper
+tests**, three-case corpus validation and version consistency. Production package
+installation/import/CLI/TUI rendering passed. The repository-profile OpenCode
+2.0.26 smoke passed with **zero model calls**, using an explicit Linux executable
+through `OPENCODE_BIN` rather than the unavailable PATH wrapper. It still creates
+three native read-only children to check ownership and permission mechanics;
+it does not prove successful provider-backed group execution.
+
+Analysis concurrency now defaults to one in the ledger, plugin and template;
+explicit overrides remain intact. Controlled overlap tests explicitly enable
+three slots. Added regressions cover atomic group rejection under the serial
+default, task-specific repair guidance without budget consumption, dependency and
+exhaustion guidance across restart, primary/executor near-limit warnings, unknown
+versus measured-zero budgets, and snapshot diagnostics without freshness caching.
+
+Three source scans of this checkout, excluding generated `work` data, covered
+71 files/symlinks and took approximately 31–38 ms each. This small local sample
+is not a large-repository benchmark or evidence of a snapshot speedup. Diagnostics
+expose scan durations and counts; no snapshot cache or filesystem lock was added.
+
+Before enabling concurrency on a target provider, opt-in integration should cover
+two independent successful analyses, one failed child with a successful sibling,
+parent cancellation, restart/recovery, and a source mutation before acceptance.
+Check native child ownership, final task states, fresh evidence and usage coverage
+against independent assertions. No paid evaluation ran; successful real-provider
+execution, large-tree overhead and cross-session filesystem isolation remain gaps.
+
+## Repository formatting
+
+On Linux on 2026-10-13, Prettier 3.9.10 was pinned as a development dependency
+and applied to supported repository files. `format:check`, typecheck,
+**147 harness tests (923 assertions)**, **13 Python helper tests**, corpus
+validation, version consistency, package installation/import/CLI/TUI rendering,
+workflow Actionlint and diff checks passed. The OpenCode 2.0.26 repository-profile
+native smoke passed with **zero model calls**. Local Windows validation was not
+run; the reusable Windows/Linux CI now includes the formatting check.
+
+Formatting excludes dependencies, generated artifacts and local credentials.
+Markdown retains double quotes in skill front matter for the existing JSON-string
+loader. The initial formatting pass spans existing source and documentation;
+formatting checks do not establish semantic effectiveness or provider isolation.
+No paid evaluation or release ran.

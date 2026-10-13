@@ -6,8 +6,8 @@ Prefer the repository's established paths. With no convention, use `docs/agent-c
 
 State scope, last verified date/revision, dirty-tree caveat and coverage in a compact provenance paragraph. Then provide a navigation table:
 
-| Area | Responsibility | Entry / important symbols | Consumers / tests | Detail |
-|---|---|---|---|---|
+| Area               | Responsibility              | Entry / important symbols     | Consumers / tests     | Detail                          |
+| ------------------ | --------------------------- | ----------------------------- | --------------------- | ------------------------------- |
 | Actual module name | One concrete responsibility | Source link and stable symbol | Evidence-backed paths | Existing explanation, if useful |
 
 Add a short “start here for…” list for common traced workflows. Technologies appear only where they help navigation, with manifest/config evidence. Rank selected entrypoints, frequently referenced interfaces and boundary modules ahead of implementation details. Confirm important relationships before explaining them. Include missing context explicitly instead of guessing ownership or calling an observed utility a domain boundary.

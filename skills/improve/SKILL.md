@@ -51,7 +51,7 @@ interface ImprovementProposal {
   observation: string;
   evidence: string[];
   hypothesis: string;
-  confidence: 'low' | 'medium' | 'high';
+  confidence: "low" | "medium" | "high";
   targetFiles: string[];
   proposedChange: string;
   expectedBenefit: string;

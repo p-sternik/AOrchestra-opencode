@@ -6,6 +6,15 @@ in the [technical reference](docs/reference.md#validation-and-evaluation). Nativ
 smoke checks accept stable OpenCode >=2.0.26 <3.0.0 (tested runtimes: 2.0.26 and 2.0.27);
 model evaluation is opt-in and can incur provider costs.
 
+Run `npm run format` before submitting changes and `npm run format:check` to check
+formatting without writing files. Prettier is pinned in development dependencies;
+CI checks formatting on Windows and Linux. Dependencies, generated output and
+local credentials are excluded through `.prettierignore` and `.gitignore`.
+Keep formatting-only changes in a separate commit from behavior changes when
+possible. Formatting supplements typecheck and behavioral tests.
+Markdown keeps double-quoted front matter because the bundled skill loader reads
+description values as JSON strings.
+
 ## Commit messages
 
 Use English Conventional Commits and retain the prefix in squash-merge titles:
