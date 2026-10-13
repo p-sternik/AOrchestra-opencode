@@ -72,3 +72,128 @@ test.skipIf(process.platform === 'win32')('release retries require matching arch
     }
   }finally{server.stop(true);await rm(root,{recursive:true,force:true});}
 },15000);
+
+// Evaluate the checked-in YAML with GitHub's expression parser/evaluator rather
+// than a second JavaScript implementation of the workflow conditions.
+import { parse } from 'yaml';
+import { Lexer, Parser, Evaluator, data } from '@actions/expressions';
+
+type Workflow = {
+  on: Record<string, unknown>;
+  concurrency: {group:string; 'cancel-in-progress':string | boolean};
+  jobs: Record<string, {if?:string;needs?:string|string[];uses?:string;with?:Record<string,string>;env?:Record<string,string>;steps?:Array<{uses?:string;run?:string;with?:Record<string,unknown>}>}>;
+};
+const releaseWorkflow=parse(await readFile(new URL('../.github/workflows/release.yml',import.meta.url),'utf8')) as Workflow;
+const validateWorkflow=parse(await readFile(new URL('../.github/workflows/validate.yml',import.meta.url),'utf8')) as Workflow;
+type Context = {
+  github:{event_name:string;ref:string;sha:string;run_id:number;event:{pull_request?:{number:number}}};
+  inputs:{publish_tag?:string;ref?:string};
+  vars:{NPM_PUBLISH_ENABLED:string};
+  needs:Record<string,{result:string;outputs:Record<string,string>}>;
+};
+const context=(event='push',tag?:string,result='success',created='true'):Context=>({
+  github:{event_name:event,ref:'refs/heads/main',sha:'a'.repeat(40),run_id:123,event:{}},
+  inputs:tag===undefined?{}:{publish_tag:tag},vars:{NPM_PUBLISH_ENABLED:'true'},
+  needs:{'validate-main':{result,outputs:{}},release:{result,outputs:{release_created:created,tag_name:'0.6.0','pr-number':'15','pr-head-sha':'b'.repeat(40)}},'validate-release-pr':{result,outputs:{}}}
+});
+function evaluate(expression:string,ctx:Context,cancelled=false,success=true) {
+  const source=expression.trim().replace(/^\$\{\{\s*/, '').replace(/\s*\}\}$/, '');
+  const functions=new Map([
+    ['cancelled',{name:'cancelled',minArgs:0,maxArgs:0,call:()=>new data.BooleanData(cancelled)}],
+    ['success',{name:'success',minArgs:0,maxArgs:0,call:()=>new data.BooleanData(success)}]
+  ]);
+  const ast=new Parser(new Lexer(source).lex().tokens,Object.keys(ctx),[...functions.values()]).parse();
+  return new Evaluator(ast,JSON.parse(JSON.stringify(ctx),data.reviver) as data.Dictionary,functions).evaluate();
+}
+function jobEnabled(name:string,ctx:Context,cancelled=false) {
+  const job=releaseWorkflow.jobs[name];
+  const needs=typeof job.needs==='string'?[job.needs]:job.needs??[];
+  const upstreamSucceeded=needs.every(id=>ctx.needs[id]?.result==='success');
+  const source=(job.if??'true').trim().replace(/^\$\{\{\s*/, '').replace(/\s*\}\}$/, '');
+  // GitHub adds success() unless a status function is already present.
+  const condition=/\b(?:cancelled|success|failure|always)\s*\(/.test(source)?source:`success() && (${source})`;
+  return evaluate(condition,ctx,cancelled,upstreamSucceeded).coerceString()==='true';
+}
+function expand(template:string,ctx:Context) {
+  return template.replace(/\$\{\{([\s\S]*?)\}\}/g,(_,expression:string)=>evaluate(expression,ctx).coerceString());
+}
+
+test('main has one CI owner and validation checks immutable event or supplied SHAs',()=>{
+  expect(validateWorkflow.on).not.toHaveProperty('push');
+  expect(validateWorkflow.on).toHaveProperty('pull_request');
+  expect(validateWorkflow.on).toHaveProperty('workflow_call');
+  expect(releaseWorkflow.on).toHaveProperty('push');
+  const checkout=validateWorkflow.jobs.validate.steps!.find(s=>s.uses?.startsWith('actions/checkout@'))!;
+  const main=context();
+  expect(expand(checkout.with!.ref as string,main)).toBe(main.github.sha);
+  const pr=context('pull_request');pr.github.ref='refs/pull/16/merge';pr.github.sha='c'.repeat(40);
+  expect(expand(checkout.with!.ref as string,pr)).toBe(pr.github.sha);
+  main.inputs.ref='b'.repeat(40);
+  expect(expand(checkout.with!.ref as string,main)).toBe(main.inputs.ref!);
+  expect(checkout.with!['persist-credentials']).toBe(false);
+});
+
+test('tag retries skip main and Release Please while publishing only the requested tag',()=>{
+  const retry=context('workflow_dispatch','0.5.0','skipped');
+  expect(jobEnabled('validate-main',retry)).toBe(false);
+  expect(jobEnabled('release',retry)).toBe(false);
+  expect(jobEnabled('merge-release-pr',retry)).toBe(false);
+  expect(jobEnabled('publish-npm',retry)).toBe(true);
+  expect(expand(releaseWorkflow.jobs['publish-npm'].env!.RELEASE_TAG,retry)).toBe('0.5.0');
+  const branchRetry=context('workflow_dispatch','0.5.0','skipped');branchRetry.github.ref='refs/heads/feature';
+  expect(jobEnabled('validate-main',branchRetry)).toBe(false);
+  expect(jobEnabled('release',branchRetry)).toBe(false);
+  expect(jobEnabled('publish-npm',branchRetry)).toBe(false);
+  expect(jobEnabled('publish-npm',context('push','0.5.0','skipped'))).toBe(false);
+});
+
+test('publication fails closed on failed, cancelled, absent or disabled ordinary releases',()=>{
+  for(const event of ['push','workflow_dispatch']) {
+    const normal=context(event);
+    expect(jobEnabled('validate-main',normal)).toBe(true);
+    expect(jobEnabled('release',normal)).toBe(true);
+    expect(jobEnabled('publish-npm',normal)).toBe(true);
+    expect(jobEnabled('publish-npm',context(event,undefined,'success','false'))).toBe(false);
+    for(const result of ['failure','cancelled','skipped']) expect(jobEnabled('publish-npm',context(event,undefined,result))).toBe(false);
+  }
+  const disabled=context();disabled.vars.NPM_PUBLISH_ENABLED='false';
+  expect(jobEnabled('publish-npm',disabled)).toBe(false);
+  expect(jobEnabled('publish-npm',context(),true)).toBe(false);
+  expect(jobEnabled('publish-npm',context('workflow_dispatch','0.5.0','skipped'),true)).toBe(false);
+  expect(jobEnabled('publish-npm',context('workflow_dispatch','0.5.0','failure'))).toBe(false);
+  expect(jobEnabled('release',context('push',undefined,'failure'))).toBe(false);
+  expect(jobEnabled('validate-main',context('workflow_dispatch',''))).toBe(true);
+  expect(jobEnabled('publish-npm',context('workflow_dispatch',''))).toBe(true);
+  const disabledRetry=context('workflow_dispatch','0.5.0','skipped');disabledRetry.vars.NPM_PUBLISH_ENABLED='false';
+  expect(jobEnabled('publish-npm',disabledRetry)).toBe(false);
+});
+
+test('only obsolete PR checks share a cancellable concurrency group',()=>{
+  const first=context('pull_request');first.github.event.pull_request={number:16};
+  const update=context('pull_request');update.github.event.pull_request={number:16};update.github.run_id=124;update.github.sha='c'.repeat(40);
+  const other=context('pull_request');other.github.event.pull_request={number:17};
+  const concurrency=validateWorkflow.concurrency;
+  expect(expand(concurrency.group,first)).toBe(expand(concurrency.group,update));
+  expect(expand(concurrency.group,first)).not.toBe(expand(concurrency.group,other));
+  expect(evaluate(concurrency['cancel-in-progress'] as string,first).coerceString()).toBe('true');
+  const main=context(),child=context();child.inputs.ref='b'.repeat(40);
+  const newer=context();newer.github.run_id=124;
+  expect(expand(concurrency.group,main)).not.toBe(expand(concurrency.group,child));
+  expect(expand(concurrency.group,main)).not.toBe(expand(concurrency.group,newer));
+  expect(evaluate(concurrency['cancel-in-progress'] as string,main).coerceString()).toBe('false');
+  expect(releaseWorkflow.concurrency['cancel-in-progress']).toBe(false);
+});
+
+test('generated release skip marker retains explicit SHA validation and its merge dependency',async()=>{
+  const config=JSON.parse(await readFile(new URL('../release-please-config.json',import.meta.url),'utf8'));
+  expect(config.packages['.']['pull-request-title-pattern']).toContain('[skip ci]');
+  const job=releaseWorkflow.jobs['validate-release-pr'];
+  expect(job.uses).toBe('./.github/workflows/validate.yml');
+  expect(expand(job.with!.ref,context())).toBe('b'.repeat(40));
+  expect(jobEnabled('merge-release-pr',context())).toBe(true);
+  const failed=context();failed.needs['validate-release-pr'].result='failure';
+  expect(jobEnabled('merge-release-pr',failed)).toBe(false);
+  const missing=context();missing.needs.release.outputs['pr-number']='';
+  expect(jobEnabled('validate-release-pr',missing)).toBe(false);
+  expect(jobEnabled('merge-release-pr',missing)).toBe(false);
+});

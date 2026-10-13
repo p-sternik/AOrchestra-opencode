@@ -25,17 +25,36 @@ a patch release PR. Ordinary Git history records every commit regardless.
 
 ## Automatic releases
 
-1. Merge changes into `main`. The Release workflow validates main on Windows and
-   Linux, then creates or updates a Release Please PR.
-2. The workflow validates the generated release PR's immutable head SHA on Windows
-   and Linux, then automatically squash-merges that exact revision. Failed checks
+1. Ordinary PRs run Validate on Windows and Linux. Updated PRs cancel their
+   obsolete checks. Checkouts use the event's immutable SHA; reusable validation
+   can supply another exact SHA. Standalone Validate does not run on main pushes.
+2. Merge changes into `main`. Release owns main validation and then creates or
+   updates a Release Please PR. Generated release titles and commits include
+   `[skip ci]`, suppressing the redundant approval-required PR workflow.
+3. Release explicitly calls reusable validation for the generated PR's immutable
+   head SHA on Windows and Linux, then automatically squash-merges that exact
+   revision. The skip marker does not suppress this workflow call. Failed checks
    or a changed revision prevent the merge. Only the same-repository Release Please
    PR targeting main, authored by github-actions[bot] and labeled
    `autorelease: pending`, is eligible. Ordinary PRs still require normal review.
-3. After merging, the workflow explicitly dispatches Release on main, validates
-   main again and creates a plain numeric tag (for example `0.2.3`) and a GitHub
-   Release. GITHUB_TOKEN merges do not trigger push workflows, so this dispatch
-   is required. npm publication follows when configured.
+4. After merging, the workflow explicitly dispatches Release on main, validates
+   the resulting event SHA and creates a plain numeric tag (for example `0.2.3`)
+   and a GitHub Release. GITHUB_TOKEN merges do not trigger push workflows, so this
+   dispatch is required. npm publication validates and checks the tagged archive
+   when configured. These checks cover the generated PR, merged revision and
+   packaged release; only the duplicate main-push validation is removed.
+
+Reusable validation has separate concurrency groups for each caller run/ref;
+release stages cannot cancel one another. Release executions remain serialized,
+with running executions protected from cancellation. A manual `publish_tag` retry
+skips main validation and Release Please entirely, validates the requested existing
+tag and retries publication only. It must be dispatched from main.
+
+The generated skip marker is limited to release commits. A branch rule requiring
+standalone PR checks that the marker skips would leave the release PR pending and
+prevent its merge. This automation does not change or bypass repository rules;
+review check requirements before enabling such rules. See GitHub's
+[skip behavior](https://docs.github.com/en/actions/how-tos/manage-workflow-runs/skip-workflow-runs).
 
 No additional token secret is required. The repository must allow GitHub Actions
 to create pull requests and allow squash merges. Existing branch protection and
