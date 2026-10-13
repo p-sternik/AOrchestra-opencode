@@ -14,6 +14,87 @@ const key = 'updates/state';
 const stable = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
 const failureMessage =
   'AOrchestra update check or installation could not finish. Run setup manually; if configuration changed, review its backup.';
+// Allow only fixed failure categories. Messages, stacks, paths and arbitrary
+// error properties can contain credentials or user configuration.
+const diagnosticCodes = new Set([
+  'AUTO_UPDATE_REGISTRY_UNAVAILABLE',
+  'AUTO_UPDATE_SETUP_FAILED',
+  'AUTO_UPDATE_TIMEOUT',
+  'AUTO_UPDATE_PACKAGE_MISMATCH',
+  'AUTO_UPDATE_CONFIG_CHANGED',
+  'AUTO_UPDATE_MODELS_REQUIRED',
+  'AUTO_UPDATE_VERSION_REJECTED',
+  'AUTO_UPDATE_OPTION_CONFLICT',
+  'INVALID_UPDATE_REQUEST',
+  'INVALID_UPDATE_SOURCE',
+  'INVALID_GLOBAL_CONFIG',
+  'INVALID_PLUGIN_LIST',
+  'INVALID_AGENTS',
+  'INVALID_OPTION',
+  'CONFIG_CHANGED_DURING_SETUP',
+  'GLOBAL_CONFIG_UNKNOWN',
+  'MODEL_REQUIRED',
+  'MODEL_NOT_IN_CATALOGUE',
+  'UNEXPECTED_PLUGIN_PACKAGE',
+  'NpmInstallFailedError',
+  'AppProcessError',
+  'ENOENT',
+  'EACCES',
+  'EPERM',
+  'ENOSPC',
+  'EROFS',
+  'EIO',
+  'EEXIST',
+  'ENOTDIR',
+  'ENOTFOUND',
+  'EAI_AGAIN',
+  'ECONNREFUSED',
+  'ECONNRESET',
+  'ETIMEDOUT',
+  'CERT_HAS_EXPIRED',
+  'UNABLE_TO_VERIFY_LEAF_SIGNATURE',
+  'DEPTH_ZERO_SELF_SIGNED_CERT',
+]);
+function diagnosticText(text: string): string[] {
+  return [
+    ...new Set(text.match(/\b[A-Za-z][A-Za-z_]+\b/g)?.filter((code) => diagnosticCodes.has(code))),
+  ];
+}
+function updateDiagnostic(error: unknown): string {
+  const codes = new Set<string>();
+  let kind = 'unknown error';
+  for (let depth = 0; depth < 4 && error && typeof error === 'object'; depth++) {
+    const value = error as {
+      name?: unknown;
+      message?: unknown;
+      code?: unknown;
+      _tag?: unknown;
+      cause?: unknown;
+    };
+    if (
+      depth === 0 &&
+      ['Error', 'TypeError', 'SyntaxError', 'TimeoutError', 'AbortError'].includes(
+        String(value.name),
+      )
+    )
+      kind = String(value.name);
+    for (const text of [value.message, value.code, value._tag])
+      if (typeof text === 'string')
+        diagnosticText(text.slice(0, 8192)).forEach((code) => codes.add(code));
+    if (typeof value.message === 'string') {
+      const http = /^AUTO_UPDATE_REGISTRY_UNAVAILABLE: HTTP ([1-5]\d\d)$/.exec(value.message);
+      if (http) codes.add(`HTTP ${http[1]}`);
+      const exit =
+        /^AUTO_UPDATE_SETUP_FAILED: exit (\d{1,3}|null)(?: signal (SIGTERM|SIGKILL|SIGABRT|SIGSEGV|SIGINT|SIGHUP|SIGQUIT|SIGILL|SIGBUS|SIGPIPE|SIGFPE|SIGTRAP|null))?/.exec(
+          value.message,
+        );
+      if (exit) codes.add(`exit ${exit[1]}${exit[2] ? ` signal ${exit[2]}` : ''}`);
+      if (value.message.startsWith('Timed out waiting for lock:')) codes.add('LOCK_TIMEOUT');
+    }
+    error = value.cause;
+  }
+  return codes.size ? [...codes].join(', ') : kind;
+}
 export type Installation = { config: Record<string, any>; spec: string };
 type UpdateState = {
   spec: string;
@@ -33,6 +114,7 @@ type Dependencies = {
   latest: () => Promise<string>;
   install: (version: string, from: string) => Promise<void>;
   now?: () => number;
+  signal?: AbortSignal;
 };
 export function updateOptions(options: Record<string, unknown>): void {
   for (const name of ['autoUpdate', 'updateCheck'])
@@ -96,6 +178,7 @@ export async function checkUpdate(deps: Dependencies): Promise<string | undefine
     });
     return message;
   } catch (error) {
+    if (deps.signal?.aborted) throw error;
     await save({
       spec: installed.spec,
       checkedAt: now,
@@ -152,7 +235,12 @@ export async function updateInstallation(
   return { config, spec };
 }
 
-async function install(version: string, from: string, directory: string): Promise<void> {
+export async function installUpdate(
+  version: string,
+  from: string,
+  directory: string,
+  spawnWorker = spawn,
+): Promise<void> {
   const env: NodeJS.ProcessEnv = {
     ...process.env,
     OPENCODE_CONFIG_DIR: directory,
@@ -166,11 +254,17 @@ async function install(version: string, from: string, directory: string): Promis
   delete env.OPENCODE_CONFIG_CONTENT;
   await new Promise<void>((resolve, reject) => {
     const worker = fileURLToPath(new URL('../scripts/update.ts', import.meta.url));
-    const child = spawn('bun', [worker, version, from], {
+    const child = spawnWorker('bun', [worker, version, from], {
       env,
-      stdio: ['ignore', 'ignore', 'inherit'],
+      stdio: ['ignore', 'ignore', 'pipe'],
       windowsHide: true,
       detached: process.platform !== 'win32',
+    });
+    // Inherited subprocess stderr bypasses the host's console logging and can
+    // expose setup values. Drain it, retaining only a bounded diagnostic window.
+    let stderr = '';
+    child.stderr?.on('data', (chunk: Buffer) => {
+      stderr = (stderr + chunk.toString('utf8')).slice(-8192);
     });
     const timer = setTimeout(
       () => {
@@ -185,7 +279,7 @@ async function install(version: string, from: string, directory: string): Promis
               process.kill(-child.pid, 'SIGTERM');
             } catch {}
         }
-        reject(new Error('AUTO_UPDATE_TIMEOUT'));
+        reject(new Error(`AUTO_UPDATE_TIMEOUT: ${diagnosticText(stderr).join(', ')}`));
       },
       15 * 60 * 1000,
     );
@@ -193,15 +287,23 @@ async function install(version: string, from: string, directory: string): Promis
       clearTimeout(timer);
       reject(error);
     });
-    child.on('close', (code) => {
+    child.on('close', (code, signal) => {
       clearTimeout(timer);
       if (code === 0) resolve();
-      else reject(new Error('AUTO_UPDATE_SETUP_FAILED'));
+      else
+        reject(
+          new Error(
+            `AUTO_UPDATE_SETUP_FAILED: exit ${code} signal ${signal}; ${diagnosticText(stderr).join(', ')}`,
+          ),
+        );
     });
   });
 }
 
-export function startUpdateCheck(ctx: Plugin.Context): {
+export function startUpdateCheck(
+  ctx: Plugin.Context,
+  overrides: Partial<Pick<Dependencies, 'load' | 'latest' | 'install'>> = {},
+): {
   message?: string;
   info: VersionStatus;
   stop: () => void;
@@ -228,6 +330,7 @@ export function startUpdateCheck(ctx: Plugin.Context): {
   const run = async () => {
     if (busy || controller.signal.aborted || status.info.installedVersion) return;
     busy = true;
+    let phase = 'locking';
     try {
       await Flock.withLock(
         `aorchestra-update:${directory}`,
@@ -236,30 +339,48 @@ export function startUpdateCheck(ctx: Plugin.Context): {
           status.message = await checkUpdate({
             version: pkg.version,
             options,
-            load: () => updateInstallation(directory, ctx),
-            get: () => ctx.storage.get(key),
+            signal: controller.signal,
+            load: () => {
+              phase = 'configuration';
+              return overrides.load ? overrides.load() : updateInstallation(directory, ctx);
+            },
+            get: () => {
+              phase = 'storage';
+              return ctx.storage.get(key);
+            },
             set: (state) => ctx.storage.set(key, state),
             publish: (state) => {
+              if (controller.signal.aborted) return;
               status.info = versionStatus(pkg.version, state);
             },
             latest: async () => {
+              phase = 'registry';
+              if (overrides.latest) return overrides.latest();
               const response = await fetch(`https://registry.npmjs.org/${pkg.name}/latest`, {
                 signal: AbortSignal.any([controller.signal, AbortSignal.timeout(10_000)]),
               });
-              if (!response.ok) throw new Error('AUTO_UPDATE_REGISTRY_UNAVAILABLE');
+              if (!response.ok)
+                throw new Error(`AUTO_UPDATE_REGISTRY_UNAVAILABLE: HTTP ${response.status}`);
               return ((await response.json()) as { version: string }).version;
             },
-            install: (version, from) => install(version, from, directory),
+            install: (version, from) => {
+              phase = 'installation';
+              return overrides.install
+                ? overrides.install(version, from)
+                : installUpdate(version, from, directory);
+            },
           });
+          phase = 'locking';
           if (status.message) console.error(status.message);
         },
         { dir: join(paths.state, 'locks'), timeoutMs: 1000, signal: controller.signal },
       );
-    } catch {
+    } catch (error) {
       if (controller.signal.aborted) return;
       status.message = failureMessage;
       status.info = { ...status.info, updateError: failureMessage };
       console.error(status.message);
+      console.error(`AOrchestra automatic update failed (${phase}): ${updateDiagnostic(error)}`);
     } finally {
       busy = false;
     }
