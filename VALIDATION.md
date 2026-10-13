@@ -318,6 +318,37 @@ observations do not establish compatibility for every runtime. Windows package
 rendering remains a CI check, and an interactive OpenCode TUI session was not
 exercised locally. No release was published or immutable 0.5.0 tag changed.
 
+## Evaluation usage reconciliation (P1)
+
+Local Linux checks on 2026-10-13 with Bun 1.2.15: **110 harness tests passed
+(578 assertions)**, **13 repo-context helper tests**, typecheck, three-case corpus
+validation, version consistency and production package installation/import/CLI/TUI
+render checks passed. The repository-profile OpenCode 2.0.26 smoke check passed
+with **zero model calls**.
+
+A separate fresh-database native check created one AOrchestra session with a
+controlled unavailable provider, waited for its failure, restarted a private
+server and reconciled its exact native session ID with one persisted telemetry
+run. It preserved missing counters as incomplete usage and made **zero model
+calls**. The initial check exposed native session pagination's boundary cursor on
+the final nonempty page; the collector now reads that cursor before deciding
+whether another root exists. A deterministic regression covers this behavior,
+telemetry pagination, trajectory identity mismatch and server cleanup.
+
+Deterministic tests cover primary/failed-worker costs, separate token categories,
+duplicate/conflicting child records, measured zero versus absent tokens,
+concurrent-session exclusion, ambiguous primary cycles, native child ownership,
+unrecorded descendants, interrupted known costs, failed-assertion costs and
+incomplete-cohort suppression of cost per verified success. Rebuilding summaries
+from the same records produces identical metrics. Routing instructions,
+permissions and the production telemetry schema were not changed.
+
+Successful provider-backed DIRECT/SELECTIVE evaluation, provider credentials in
+fresh databases, native successful worker-family collection and Windows native
+integration remain untested. No paid evaluation was run. The controlled failure
+and deterministic counters establish collection mechanics, not measured model
+costs, semantic effectiveness or strategy superiority.
+
 ## Automated CI and release routing
 
 Local Linux checks on 2026-10-13, based on main v0.6.0: **106 harness tests
