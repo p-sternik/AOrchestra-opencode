@@ -486,11 +486,12 @@ missing measurements or inadequate comparisons inconclusive. No policy is adopte
 automatically. See the skill's [experiment guidance](../skills/improve/references/experiments.md).
 
 Evaluation success requires an explicit `succeeded` runtime outcome, passing
-independent behavior and scope checks, and the strategy policy. Results expose
-`executionConfirmed` separately from `behaviorPassed`, `scopePassed` and
+independent behavior and original-regression checks, scope checks and the strategy policy. Results expose
+`executionConfirmed` separately from `behaviorPassed`, `regressionPassed`, `policyPassed`, `scopePassed` and
 `usageComplete`; missing usage does not itself reject confirmed success.
 
-The existing three-case evaluation suite is smoke coverage. Its runner reconciles
+The evaluation suite includes three smoke cases and ten synthetic brownfield cases,
+with development and holdout splits. See the [benchmark methodology](benchmark.md). Its runner reconciles
 native workflow usage as described [below](#validation-and-evaluation); missing
 measurements remain unknown. Deterministic checks alone cannot establish cost
 savings. Paid `eval:run` remains opt-in. There is no new experiment registry, diagnostic service,
@@ -540,10 +541,11 @@ the skill must come from the actually loaded package rather than the CLI cache.
 Opt-in real-model evaluation:
 
 ```sh
-bun run eval:run -- --strategy=both --repeat=3
+bun run eval:run -- --phase=smoke --strategy=both --case=legacy-zero-default --repeat=1 --output-dir=work/eval-smoke
+bun run eval:run -- --phase=benchmark --strategy=both --repeat=3 --smoke-report=work/eval-smoke/report.json --output-dir=work/eval-development
 ```
 
-This runs paid/provider-backed inference on three fresh fixture workspaces under
+This runs paid/provider-backed inference on nine development fixtures in fresh workspaces under
 `work/eval` (override with `--output-dir`). Each attempt has a separate native
 OpenCode database, a `workspace` directory, `trajectory.jsonl` and `metrics.json`.
 The database and measurement files live outside the workspace so they do not
@@ -566,7 +568,11 @@ Raw native JSONL can contain task/tool content; only metadata is exported to
 fields. It adds session/run references, token categories, usage completeness and
 issues, and per-strategy comparisons. In v2, `durationMs` measures CLI wall time,
 including native startup, and excludes reconciliation and independent assertions.
-`report.md` presents the same strategy summary. DIRECT attempts that delegate are
+`report.md` presents strategy summaries, category coverage, per-trial outcomes and
+matched per-case variability. Protocols pair cases/repetitions and alternate order.
+DIRECT sessions deny delegation through native permissions before CLI continuation;
+SELECTIVE retains resolved permissions. Source/settings fingerprints reject drift.
+DIRECT attempts that delegate are
 failed policy checks; SELECTIVE includes both native DIRECT and delegated work
 chosen under the normal routing policy.
 Delegation evidence includes native descendants, all matching primary telemetry
@@ -581,22 +587,23 @@ tokens, so total tokens sum input, output, reasoning, cache-read and cache-write
 Costs are native counter estimates, not provider invoices. An interrupted attempt
 can retain known usage but has incomplete lifecycle coverage.
 
-Independent assertions and scope checks determine verified success; telemetry's
+Independent behavior, original fixture regression and scope checks determine verified success; telemetry's
 native success alone never proves it. Observed cost sums attempts whose complete
 workflow-cost counters are known, including failed/interrupted attempts; its run
 count is shown alongside full usage coverage. Cost per verified success divides
 the cost of **all** attempts in a strategy by verified successes, only when every
-attempt has complete counters, correlation and lifecycle observations and there
-is at least one success. Otherwise it remains null. No automatic winner or
+attempt has complete cost counters, correlation and lifecycle observations and there
+is at least one success. Token coverage is reported separately. Otherwise it remains null. No automatic winner or
 percentage-improvement claim is generated.
 
-The small corpus is a smoke suite, not representative legacy evidence. See
+The synthetic corpus is a limited brownfield baseline, not representative legacy evidence. See
 [VALIDATION.md](../VALIDATION.md) before interpreting results.
 
 ## Limits
 
 - Default budgets: eight delegations per primary session, two attempts per task,
-  two repair cycles per task, ten minutes per delegation and 300k reported tokens per native session. These
+  two repair cycles per task, ten minutes per delegation and a 300k cumulative usage warning
+  without a default hard session-token limit. Explicit token limits
   are safeguards, not measured optimal thresholds or a hard whole-ticket dollar cap.
   The session-token limit uses the same total as usage reports: uncached input,
   visible output, reasoning, cache-read and cache-write. It is checked before the

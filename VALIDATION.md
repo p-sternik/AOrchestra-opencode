@@ -84,7 +84,8 @@ For an effectiveness benchmark, use matched historical tasks from target
 repositories, identical base revisions and model/provider settings, independent
 behavior and scope checks, and report both successful and blocked/failed runs.
 Compare the prior harness with this controller before changing routing. The three
-existing evaluation fixtures are smoke coverage, not that benchmark.
+evaluation fixtures provide a synthetic baseline, not that benchmark. See the
+[brownfield methodology](docs/benchmark.md).
 
 ## Release, permissions and acceptance revocation
 
@@ -574,3 +575,61 @@ successful provider-backed concurrent execution or an effectiveness/isolation
 claim. Remote CI and Windows were not run locally. Large-JSON handling remains a
 separate follow-up; these corrections do not establish native large-file limits
 or solve actual context overflow. No paid evaluation, release or PR merge ran.
+
+## Brownfield evaluation baseline
+
+Local Linux checks on 2026-10-13 with Bun 1.2.15: typecheck,
+**164 tests (1,059 assertions)**, development/holdout corpus validation and formatting
+passed. The OpenCode 2.0.26 repository-profile no-inference smoke also passed with
+**zero model calls**. Its new native shell check generated 1,728,892 bytes of JSON,
+retrieved bounded 12,000-byte slices and verified cursor continuation. The native
+API's `truncated` flag was false for these bounded slices; byte counts and cursor
+progress establish retrieval coverage without assuming that flag describes paging.
+
+Ten added synthetic cases cover local bugs, cross-module consumers, public API
+compatibility, shared-module refactoring, conventions, preserved behavior and
+independent read-only analysis. Six join the three original development cases;
+four live in a separate holdout file. Controlled fixture tests reject each original,
+accept a scoped reference repair, preserve existing tests and reject broken behavior
+even when workspace tests are removed. The runner retains native usage reconciliation,
+adds explicit matched primary-model selection and records configured conditions and
+observed model IDs. Reports expose token/delegation totals and coverage without
+replacing unknown counters with zero or dropping failed-attempt costs.
+
+Large JSON hook coverage leaves output unchanged and verifies dispatch after
+347,000 historical tokens under default/null limits, rejection under an explicit
+300,000 limit and unknown counters remaining unknown. Existing primary/executor
+limit regressions still pass. See the [methodology and threats](docs/benchmark.md).
+This does not prove model-facing native tool line truncation, provider dispatch at
+actual context capacity, real-repository effectiveness, isolated delegation overhead
+or strategy superiority. Paid benchmarks and Windows integration were not run.
+
+## DIRECT and SELECTIVE evaluation protocols
+
+Local Linux checks on 2026-10-13 with Bun 1.2.15: typecheck,
+**172 tests (1,111 assertions)** and both development/holdout corpus checks passed.
+The OpenCode 2.0.26 repository-profile no-inference smoke passed with **zero model
+calls**. Native checks use the same preparation helper as evaluation: persist
+session permissions, resume each protocol through the CLI with `--auto` and an
+unavailable provider, confirm session identity and verify DIRECT denies remain
+while read/edit/test permissions are retained. Separate fresh workspaces/databases
+also produced identical resolved-settings fingerprints. New protocol checks run
+only in repository-profile mode, preserving customized global configuration checks.
+
+The runner pairs cases/repetitions, alternates strategy order, detects changed
+harness source or resolved settings before dispatch and checkpoints every attempt.
+Performance runs require a successful matched provider-backed fixture smoke for
+both protocols; no such run was authorized or executed here. Original fixture
+regression sources run independently of workspace tests, with their original import
+directory. Tests cover removed workspace tests, failed regression acceptance,
+unknown counters, distinct cost/token coverage, incomplete lifecycle, unmatched or
+duplicate pairs, descriptive variability, provider/child retries and repair counters
+from paginated native history. SELECTIVE without children remains SELECTIVE.
+
+These results validate deterministic protocol controls and native permission
+persistence, not successful provider coding, comparative savings or process
+isolation. Missing tool history leaves repair counts unknown; child retry counts do
+not infer rejected requests without a child. Within-attempt external configuration
+changes and counterfactual delegation overhead remain limitations. Provider-backed
+smokes/repetitions, parallel-provider experiments and Windows integration were not
+run. See the [methodology](docs/benchmark.md) before interpreting comparisons.

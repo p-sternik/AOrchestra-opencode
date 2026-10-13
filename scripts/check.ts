@@ -5,6 +5,7 @@ import { command, binary, privateClient, removeTemporary, assertRuntime } from '
 import { metricsRpc, type Run } from '../lib/telemetry';
 import { Npm } from '@opencode/util/npm';
 import { BUNDLED_SKILLS, permissionRules } from '../lib/core';
+import { prepareEvaluationSession, trajectorySessionIDs } from './eval-usage';
 import { versionRpc, type VersionStatus } from '../lib/version-status';
 import packageInfo from '../package.json';
 const root = resolve(import.meta.dir, '..');
@@ -68,6 +69,51 @@ try {
           })
         : [],
     );
+  }
+  // The pinned native shell API supports bounded output retrieval without inference.
+  // This is an API byte limit, separate from model-facing tool_output truncation.
+  const outputScript = resolve(scratch, 'large-json.cjs');
+  await Bun.write(
+    outputScript,
+    'console.log(JSON.stringify(Array.from({length:20000},(_,id)=>({id,text:"x".repeat(64)}))));',
+  );
+  const nativeShell = await client.shell.create({
+    location: { directory: project },
+    command: `node "${outputScript}"`,
+    timeout: 10_000,
+  });
+  try {
+    let terminal = nativeShell.data;
+    for (let attempt = 0; attempt < 100 && terminal.status === 'running'; attempt++) {
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      terminal = (
+        await client.shell.get({ id: nativeShell.data.id, location: { directory: project } })
+      ).data;
+    }
+    if (terminal.status !== 'exited' || terminal.exit !== 0)
+      throw new Error('NATIVE_JSON_OUTPUT_FAILED');
+    const bounded = (
+      await client.shell.output({ id: terminal.id, limit: 12000, location: { directory: project } })
+    ).data;
+    if (
+      bounded.size < 1_000_000 ||
+      Buffer.byteLength(bounded.output) !== 12000 ||
+      bounded.cursor !== 12000 ||
+      bounded.cursor >= bounded.size
+    )
+      throw new Error('NATIVE_OUTPUT_LIMIT_FAILED');
+    const next = (
+      await client.shell.output({
+        id: terminal.id,
+        cursor: bounded.cursor,
+        limit: 12000,
+        location: { directory: project },
+      })
+    ).data;
+    if (next.cursor <= bounded.cursor || Buffer.byteLength(next.output) > 12000)
+      throw new Error('NATIVE_OUTPUT_CURSOR_FAILED');
+  } finally {
+    await client.shell.remove({ id: nativeShell.data.id, location: { directory: project } });
   }
   const bootstrap = await client.session.create({ location: { directory: project } });
   let [plugins, agents] = await Promise.all([
@@ -189,6 +235,71 @@ try {
       await assertPermission(session.id, [skill.id], 'deny', 'skill');
     }
     await assertPermission(permissionSession.id, ['unrelated-skill'], 'deny', 'skill');
+    if (!globalMode) {
+      const protocolSessions: string[] = [];
+      try {
+        let settings: string | undefined;
+        for (const strategy of ['direct', 'selective'] as const) {
+          const prepared = await prepareEvaluationSession(
+            project,
+            checkEnv,
+            strategy,
+            'aorchestra-smoke-missing-provider/missing',
+            async () => ({ client, close: async () => {} }),
+          );
+          protocolSessions.push(prepared.sessionID);
+          const current = JSON.stringify(prepared.settings);
+          settings ??= current;
+          if (current !== settings) throw new Error('NATIVE_EVALUATION_SETTINGS_MISMATCH');
+          // Resume exactly as eval.ts does, with an unavailable provider so no
+          // external inference can run. --auto must preserve explicit session denies.
+          let resumeOutput = '';
+          await command(
+            [
+              'run',
+              '--standalone',
+              '--session',
+              prepared.sessionID,
+              '--agent',
+              'aorchestra',
+              '--model',
+              'aorchestra-smoke-missing-provider/missing',
+              '--auto',
+              '--format',
+              'json',
+              'Controlled protocol resume smoke',
+            ],
+            project,
+            20_000,
+            checkEnv,
+            (chunk) => {
+              resumeOutput += chunk;
+            },
+          ).catch(() => {});
+          if (
+            JSON.stringify(trajectorySessionIDs(resumeOutput)) !==
+            JSON.stringify([prepared.sessionID])
+          )
+            throw new Error('NATIVE_EVALUATION_RESUME_NOT_OBSERVED');
+          await assertPermission(
+            prepared.sessionID,
+            ['*'],
+            strategy === 'direct' ? 'deny' : 'allow',
+            'aorchestra_delegate',
+          );
+          await assertPermission(prepared.sessionID, ['*'], 'deny', 'subagent');
+          await assertPermission(prepared.sessionID, ['README.md'], 'allow', 'read');
+          await assertPermission(prepared.sessionID, ['README.md'], 'allow', 'edit');
+          await assertPermission(prepared.sessionID, ['bun test'], 'allow');
+          if ((await client.session.list({ parentID: prepared.sessionID })).data.length)
+            throw new Error('NATIVE_DIRECT_CHILD_OBSERVED');
+        }
+      } finally {
+        await Promise.all(
+          protocolSessions.map((sessionID) => client.session.remove({ sessionID })),
+        );
+      }
+    }
     const concurrentChildren = await Promise.all(
       Array.from({ length: 3 }, (_, index) =>
         client.session.create({
@@ -227,6 +338,26 @@ try {
     }
   } finally {
     await client.session.remove({ sessionID: permissionSession.id });
+  }
+  if (!globalMode) {
+    let frozen: string | undefined;
+    const sessionIDs = new Set<string>();
+    for (const strategy of ['direct', 'selective'] as const) {
+      const attempt = await mkdtemp(resolve(scratch, 'eval-protocol-'));
+      const cwd = resolve(attempt, 'workspace');
+      await mkdir(cwd);
+      const prepared = await prepareEvaluationSession(
+        cwd,
+        { ...checkEnv, OPENCODE_DB: resolve(attempt, 'opencode.db') },
+        strategy,
+        'aorchestra-smoke-missing-provider/missing',
+      );
+      const settings = JSON.stringify(prepared.settings);
+      frozen ??= settings;
+      if (settings !== frozen || sessionIDs.has(prepared.sessionID))
+        throw new Error('NATIVE_FRESH_EVALUATION_MISMATCH');
+      sessionIDs.add(prepared.sessionID);
+    }
   }
   let skills = await client.skill.list({ location: { directory: project } });
   const registeredSkills = () =>
@@ -301,6 +432,9 @@ try {
         bundledSkill: true,
         skillAutoinvoke: false,
         nativeFailureTelemetry: true,
+        nativeLargeJsonOutputLimit: true,
+        nativeEvaluationProtocols: globalMode ? null : true,
+        nativeEvaluationFreshAttempts: globalMode ? null : true,
         modelCalls: 0,
       },
       null,

@@ -1,0 +1,33 @@
+{
+  "brownfield-cache-falsy": {
+    "memo.js": "export function memoize(fn) { const cache=new Map(); return key => { if (!cache.has(key)) cache.set(key,fn(key)); return cache.get(key); }; }\n"
+  },
+  "brownfield-pagination": {
+    "paging.js": "export const page=(rows,n,size)=>rows.slice((n-1)*size,n*size);\n"
+  },
+  "brownfield-api-options": {
+    "greet.js": "export function greet(name,options='Hello') { const prefix=typeof options==='object' ? options.prefix ?? 'Hello' : options; return `${prefix} ${name}`; }\n"
+  },
+  "brownfield-refactor-labels": {
+    "search.js": "import {label} from './labels.js'; export const searchLabels=xs=>xs.map(label);\n",
+    "index.js": "import {label} from './labels.js'; export const indexLabels=xs=>xs.map(label);\n"
+  },
+  "brownfield-analysis-callers": {
+    "findings.json": "{\"callers\": [\"safe.js\", \"unsafe.js\"], \"nullSafeCallers\": [\"safe.js\"], \"zeroDiscardingSettings\": [\"timeout\"]}"
+  },
+  "brownfield-sort-copy": {
+    "scores.js": "export const sortedScores=xs=>[...xs].sort((a,b)=>a-b);\n"
+  },
+  "brownfield-csv-quotes": {
+    "csv.js": "export const field=x=>{const s=String(x); return /[,\\n\"]/.test(s)?`\"${s.replaceAll('\"','\"\"')}\"`:s;}; export const row=xs=>xs.map(field).join(',');\n"
+  },
+  "brownfield-inventory": {
+    "stock.js": "export const available=(stock,id,qty)=>stock[id]>=qty;\n"
+  },
+  "brownfield-update-immutable": {
+    "records.js": "export const rename=(record,name)=>({...record,name});\n"
+  },
+  "brownfield-analysis-boundaries": {
+    "findings.json": "{\"mutatingExports\": [\"append\"], \"nullableExports\": [\"first\"]}"
+  }
+}

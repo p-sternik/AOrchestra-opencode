@@ -2395,3 +2395,49 @@ test('two analysis slots overlap, deny writes and preserve a running sibling aft
     await f.clean();
   }
 });
+
+test('large JSON tool evidence leaves native truncation and cumulative dispatch budgets independent', async () => {
+  const payload = JSON.stringify(
+    Array.from({ length: 20000 }, (_, id) => ({ id, text: 'x'.repeat(64) })),
+  );
+  expect(Buffer.byteLength(payload)).toBeGreaterThan(1_000_000);
+  for (const options of [{}, { maxSessionTokens: null }, { maxSessionTokens: 300000 }]) {
+    const f = await fixture(options);
+    try {
+      const get = f.ctx.session.get;
+      f.ctx.session.get = async (input) => ({
+        ...(await get(input)),
+        tokens: { input: 347000, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+      });
+      const result = { output: payload, metadata: { truncated: false } };
+      await f.runTool({
+        sessionID: 'primary',
+        id: 'large-json',
+        tool: 'read',
+        input: { filePath: 'data.json' },
+        result,
+      });
+      expect(result.output).toBe(payload);
+      const context = {
+        agent: 'aorchestra',
+        sessionID: 'primary',
+        tools: {},
+        options: {},
+        system: [],
+        model: { providerID: 'test', id: 'model' },
+      };
+      if (options.maxSessionTokens === 300000)
+        await expect(f.hooks.get('session:context')!(context)).rejects.toThrow(
+          'SESSION_TOKEN_BUDGET_EXCEEDED',
+        );
+      else await f.hooks.get('session:context')!(context);
+      f.ctx.session.get = async (input) => ({ ...(await get(input)), tokens: {} as any });
+      expect(
+        JSON.parse((await f.invoke('aorchestra_task', { operation: 'status' })).content).tokenBudget
+          .consumed,
+      ).toBeNull();
+    } finally {
+      await f.clean();
+    }
+  }
+});

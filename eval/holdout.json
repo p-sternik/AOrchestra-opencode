@@ -1,0 +1,56 @@
+{
+  "version": 1,
+  "cases": [
+    {
+      "id": "brownfield-csv-quotes",
+      "task": "CSV fields must preserve embedded double quotes when exported. Preserve comma/newline quoting and simple fields; keep the row API. Preserve existing conventions and tests. Verify your work. Allowed changes: csv.js, regression.test.js.",
+      "files": {
+        "package.json": "{\"type\": \"module\", \"scripts\": {\"test\": \"node regression.test.js\"}}\n",
+        "AGENTS.md": "Use ES modules and node:assert/strict. Preserve exports and caller data. Run npm run test.\n",
+        "csv.js": "export const field=x=>{const s=String(x); return /[,\\n\"]/.test(s)?`\"${s}\"`:s;}; export const row=xs=>xs.map(field).join(',');\n",
+        "regression.test.js": "import assert from 'node:assert/strict'; import {row} from './csv.js'; assert.equal(row(['a','b,c']),'a,\"b,c\"');\n"
+      },
+      "allowedChanges": ["csv.js", "regression.test.js"],
+      "assertions": "const {field,row}=await import('./csv.js'); assert.equal(field('a\"b'),'\"a\"\"b\"'); assert.equal(field('a,b'),'\"a,b\"'); assert.equal(field('a\\nb'),'\"a\\nb\"'); assert.equal(row(['',0,'abc'] ),',0,abc'); assert.equal(row([]),'');"
+    },
+    {
+      "id": "brownfield-inventory",
+      "task": "Both checkout and preview must reject a requested quantity greater than stock, accept an exact-stock request and leave inventory unchanged. Preserve return shapes and available() export. Preserve existing conventions and tests. Verify your work. Allowed changes: stock.js, checkout.js, preview.js, regression.test.js.",
+      "files": {
+        "package.json": "{\"type\": \"module\", \"scripts\": {\"test\": \"node regression.test.js\"}}\n",
+        "AGENTS.md": "Use ES modules and node:assert/strict. Preserve exports and caller data. Run npm run test.\n",
+        "stock.js": "export const available=(stock,id,qty)=>Boolean(stock[id]);\n",
+        "checkout.js": "import {available} from './stock.js'; export const checkout=(s,id,n)=>({ok:available(s,id,n),quantity:n});\n",
+        "preview.js": "import {available} from './stock.js'; export const preview=(s,id,n)=>available(s,id,n)?'available':'unavailable';\n",
+        "regression.test.js": "import assert from 'node:assert/strict'; import {checkout} from './checkout.js'; assert.deepEqual(checkout({a:2},'a',1),{ok:true,quantity:1});\n"
+      },
+      "allowedChanges": ["stock.js", "checkout.js", "preview.js", "regression.test.js"],
+      "assertions": "const {available}=await import('./stock.js'); const {checkout}=await import('./checkout.js'); const {preview}=await import('./preview.js'); const s=Object.freeze({a:2,b:0}); assert.equal(available(s,'a',3),false); assert.deepEqual(checkout(s,'a',2),{ok:true,quantity:2}); assert.deepEqual(checkout(s,'a',3),{ok:false,quantity:3}); assert.equal(preview(s,'a',3),'unavailable'); assert.equal(preview(s,'a',1),'available'); assert.equal(available(s,'missing',1),false); assert.equal(available(s,'b',1),false); assert.deepEqual(s,{a:2,b:0});"
+    },
+    {
+      "id": "brownfield-update-immutable",
+      "task": "rename must return an updated record without mutating its input, including frozen records. Preserve unrelated properties and return a distinct object even when the name is unchanged. Preserve existing conventions and tests. Verify your work. Allowed changes: records.js, regression.test.js.",
+      "files": {
+        "package.json": "{\"type\": \"module\", \"scripts\": {\"test\": \"node regression.test.js\"}}\n",
+        "AGENTS.md": "Use ES modules and node:assert/strict. Preserve exports and caller data. Run npm run test.\n",
+        "records.js": "export const rename=(record,name)=>{record.name=name;return record;};\n",
+        "regression.test.js": "import assert from 'node:assert/strict'; import {rename} from './records.js'; assert.equal(rename({name:'a'},'b').name,'b');\n"
+      },
+      "allowedChanges": ["records.js", "regression.test.js"],
+      "assertions": "const {rename}=await import('./records.js'); const nested={active:true}; const r=Object.freeze({id:1,name:'a',nested}); const updated=rename(r,'b'); assert.deepEqual(updated,{id:1,name:'b',nested}); assert.notEqual(updated,r); assert.equal(updated.nested,nested); assert.equal(r.name,'a'); assert.notEqual(rename(r,'a'),r);"
+    },
+    {
+      "id": "brownfield-analysis-boundaries",
+      "task": "Independently review the read model and write model. Report exported functions that mutate their array argument and exported functions that return null for empty input. Write findings.json with sorted arrays mutatingExports and nullableExports. All existing files are read-only. Preserve existing conventions and tests. Verify your work. Allowed changes: findings.json.",
+      "files": {
+        "package.json": "{\"type\": \"module\", \"scripts\": {\"test\": \"node regression.test.js\"}}\n",
+        "AGENTS.md": "Use ES modules and node:assert/strict. Preserve exports and caller data. Run npm run test.\n",
+        "read.js": "export const first=xs=>xs[0] ?? null; export const count=xs=>xs.length;\n",
+        "write.js": "export const append=(xs,x)=>{xs.push(x);return xs;}; export const copyAppend=(xs,x)=>[...xs,x];\n",
+        "regression.test.js": "import assert from 'node:assert/strict'; import {count} from './read.js'; assert.equal(count([]),0);\n"
+      },
+      "allowedChanges": ["findings.json"],
+      "assertions": "const {readFile}=await import('node:fs/promises'); assert.deepEqual(JSON.parse(await readFile('findings.json','utf8')),{mutatingExports:['append'],nullableExports:['first']}); const {first,count}=await import('./read.js'); assert.equal(first([]),null); assert.equal(count([]),0);"
+    }
+  ]
+}

@@ -17,12 +17,16 @@ Existing checkout commands:
 
 ```sh
 bun run eval:check
-bun run eval:run -- --strategy=both --repeat=3
+bun run eval:run -- --phase=smoke --strategy=both --case=legacy-zero-default --repeat=1 --output-dir=work/eval-smoke
+bun run eval:run -- --phase=benchmark --strategy=both --repeat=3 --smoke-report=work/eval-smoke/report.json --output-dir=work/eval-development
 ```
 
-The second command invokes paid/provider-backed models and requires a separate
-explicit request. The three-case corpus is smoke coverage, not a representative
-brownfield benchmark. DIRECT versus selective compares strategies; it does not by
+The `eval:run` commands invoke paid/provider-backed models and require separate
+explicit authorization. Benchmark repetitions require a matched successful fixture
+smoke for both protocols. Paired order alternates across repetitions; DIRECT has
+native session delegation denies, while SELECTIVE retains normal routing. The corpus contains three smoke cases and ten synthetic brownfield cases in
+separate development/holdout files; see the [benchmark methodology](../../../docs/benchmark.md).
+It does not establish representative real-repository performance. DIRECT versus selective compares strategies; it does not by
 itself compare baseline and candidate harness revisions. Evaluate each revision
 under matched conditions. The runner now reconciles native whole-workflow usage
 and reports measurement coverage; see the [evaluation reference](../../../docs/reference.md#validation-and-evaluation).

@@ -1,6 +1,8 @@
 import { expect, test } from 'bun:test';
 import {
   comparison,
+  caseComparisons,
+  evaluationActivity,
   evaluationMarkdown,
   evaluationPolicy,
   evaluationOutcome,
@@ -17,6 +19,8 @@ const row = (overrides: Partial<EvaluationResult> = {}): EvaluationResult => ({
   passed: true,
   executionConfirmed: true,
   behaviorPassed: true,
+  regressionPassed: true,
+  policyPassed: true,
   scopePassed: true,
   changedPaths: [],
   delegations: 0,
@@ -29,6 +33,13 @@ const row = (overrides: Partial<EvaluationResult> = {}): EvaluationResult => ({
   cacheReadTokens: 0,
   cacheWriteTokens: 0,
   usageComplete: true,
+  costComplete: overrides.usageComplete ?? true,
+  lifecycleComplete: true,
+  providerRetries: 0,
+  delegationRetries: 0,
+  repairs: 0,
+  toolActivity: {},
+  settingsFingerprint: 'matched',
   usageIssues: [],
   missingSessions: [],
   sessionID: 'primary',
@@ -47,12 +58,16 @@ test('comparison includes costs of failed assertions and only divides complete c
     row({ strategy: 'selective', totalWorkflowCost: 0 }),
   ];
   const groups = comparison(rows);
-  expect(groups[0]).toEqual({
+  expect(groups[0]).toMatchObject({
     strategy: 'direct',
     runs: 2,
     verifiedSuccesses: 1,
     verifiedSuccessRate: 0.5,
     totalObservedCostUSD: 5,
+    totalObservedTokens: 0,
+    observedTokenRuns: 2,
+    totalDelegations: 0,
+    missingUsageRuns: 0,
     observedCostRuns: 2,
     completeUsageRuns: 2,
     usageCoverage: 1,
@@ -68,6 +83,7 @@ test('comparison includes costs of failed assertions and only divides complete c
     row({ usageComplete: false, totalWorkflowCost: null, scopePassed: false, passed: false }),
   ])[0];
   expect(incomplete.totalObservedCostUSD).toBe(5);
+  expect(incomplete.totalCostUSD).toBeNull();
   expect(incomplete.costPerVerifiedSuccessUSD).toBe(null);
   expect(incomplete.usageCoverage).toBe(2 / 3);
   expect(incomplete.scopeViolations).toBe(1);
@@ -209,6 +225,38 @@ test('native reconciliation exhausts boundary cursors and paginated telemetry wi
   const calls: string[] = [];
   const connect: Parameters<typeof readEvaluationUsage>[3] = async () => ({
     client: {
+      message: {
+        list: async (input: { cursor?: string }) => {
+          calls.push(`messages:${input.cursor ?? ''}`);
+          return {
+            data: [
+              {
+                type: 'assistant',
+                content: [
+                  {
+                    id: 'repair-call',
+                    type: 'tool',
+                    name: 'aorchestra_task',
+                    state: {
+                      status: 'completed',
+                      input: { operation: 'repair' },
+                      content: [
+                        {
+                          type: 'text',
+                          text: JSON.stringify({
+                            tasks: [{ id: 'fix', workflow: { repairs: input.cursor ? 2 : 1 } }],
+                          }),
+                        },
+                      ],
+                    },
+                  },
+                ],
+              },
+            ],
+            cursor: input.cursor ? {} : { next: 'tools-next' },
+          };
+        },
+      },
       session: {
         list: async (input: { parentID?: string | null; cursor?: string }) => {
           calls.push(`session:${input.parentID}:${input.cursor ?? ''}`);
@@ -248,6 +296,9 @@ test('native reconciliation exhausts boundary cursors and paginated telemetry wi
   expect(measured.complete).toBe(true);
   expect(measured.usage.costUSD).toBe(0);
   expect(measured.records.length).toBe(1);
+  expect(measured.repairs).toBe(2);
+  expect(measured.activityIssues).toEqual([]);
+  expect(calls).toContain('messages:tools-next');
   expect(calls).toContain('session:null:last-boundary');
   expect(calls).toContain('metrics:next');
   expect(calls.slice(-2)).toEqual(['remove', 'close']);
@@ -267,6 +318,7 @@ test('evaluation requires explicit runtime success independently of usage covera
   for (const overrides of [
     { error: 'CLI failed' },
     { behaviorPassed: false },
+    { regressionPassed: false },
     { scopePassed: false },
   ]) {
     expect(evaluationOutcome(row(overrides), true)).toEqual({
@@ -275,4 +327,229 @@ test('evaluation requires explicit runtime success independently of usage covera
     });
   }
   expect(evaluationOutcome(row(), false)).toEqual({ executionConfirmed: true, passed: false });
+});
+
+test('token totals expose partial coverage and preserve measured zero', () => {
+  const g = comparison([
+    row({ totalWorkflowTokens: 347000, delegations: 2 }),
+    row({
+      passed: false,
+      totalWorkflowTokens: null,
+      usageComplete: false,
+      usageIssues: ['missing-usage-counters'],
+    }),
+  ])[0];
+  expect(g.totalObservedTokens).toBe(347000);
+  expect(g.observedTokenRuns).toBe(1);
+  expect(g.totalDelegations).toBe(2);
+  expect(g.missingUsageRuns).toBe(1);
+  expect(g.costPerVerifiedSuccessUSD).toBeNull();
+  expect(comparison([row({ totalWorkflowTokens: null })])[0].totalObservedTokens).toBeNull();
+  expect(comparison([row()])[0].totalObservedTokens).toBe(0);
+});
+
+test('paired case comparisons retain failures, unmatched attempts and descriptive variability', () => {
+  const rows = [
+    row(),
+    row({ strategy: 'selective', totalWorkflowCost: 4, durationMs: 20 }),
+    row({ repeat: 2, totalWorkflowCost: 1, passed: false }),
+    row({ repeat: 2, strategy: 'selective', totalWorkflowCost: 2, durationMs: 40 }),
+    row({ id: 'other', totalWorkflowCost: null, costComplete: false }),
+  ];
+  const cases = caseComparisons(rows);
+  expect(cases[0].pairs.map((p) => p.costDifferenceUSD)).toEqual([2, 1]);
+  expect(cases[0].costDifferenceVariabilityUSD.mean).toBe(1.5);
+  expect(cases[0].costDifferenceVariabilityUSD.sampleStandardDeviation).toBeCloseTo(Math.sqrt(0.5));
+  expect(cases[0].strategies[0].costPerVerifiedSuccessUSD).toBe(3);
+  expect(cases[1].pairs[0].matched).toBe(false);
+  expect(cases[1].pairs[0].costDifferenceUSD).toBeNull();
+  expect(
+    caseComparisons([row(), row({ strategy: 'selective', settingsFingerprint: 'changed' })])[0]
+      .pairs[0].costDifferenceUSD,
+  ).toBeNull();
+  expect(caseComparisons([row(), row(), row({ strategy: 'selective' })])[0].pairs[0].matched).toBe(
+    false,
+  );
+  expect(evaluationMarkdown(rows)).toContain('| Case | Repeat | Strategy |');
+  expect(evaluationMarkdown(rows)).toContain('Paired USD difference');
+});
+
+test('complete cost coverage is separate from missing token categories', () => {
+  const result = row({
+    usageComplete: false,
+    costComplete: true,
+    totalWorkflowTokens: null,
+    inputTokens: null,
+    reasoningTokens: null,
+  });
+  const g = comparison([result, row({ passed: false, totalWorkflowCost: 3 })])[0];
+  expect(g.costPerVerifiedSuccessUSD).toBe(5);
+  expect(g.totalCostUSD).toBe(5);
+  expect(g.tokenCategories.inputTokens).toEqual({ totalObserved: 0, observedRuns: 1 });
+  expect(g.completeUsageRuns).toBe(1);
+  expect(g.completeCostRuns).toBe(2);
+  expect(
+    comparison([row({ costComplete: false, totalWorkflowCost: 0 })])[0].costPerVerifiedSuccessUSD,
+  ).toBeNull();
+});
+
+test('activity counts retry children once and repairs from durable counters; unknowns stay null', () => {
+  const base = {
+    tools: { aorchestra_task: 2 },
+    providerRetries: 2,
+    children: [
+      { sessionID: 'child', attempt: 2 },
+      { sessionID: 'child', attempt: 2 },
+    ],
+  } as unknown as Run;
+  const tool = (id: string, repairs: number) => ({
+    id,
+    name: 'aorchestra_task',
+    state: {
+      status: 'completed',
+      input: { operation: 'repair' },
+      content: [
+        { type: 'text', text: JSON.stringify({ tasks: [{ id: 'fix', workflow: { repairs } }] }) },
+      ],
+    },
+  });
+  expect(evaluationActivity(base, [tool('one', 1), tool('two', 2)])).toEqual({
+    toolActivity: base.tools,
+    providerRetries: 2,
+    delegationRetries: 1,
+    repairs: 2,
+  });
+  expect(evaluationActivity(base, null).repairs).toBeNull();
+  expect(evaluationActivity(null, null).providerRetries).toBeNull();
+  expect(evaluationActivity(base, []).repairs).toBeNull();
+  expect(evaluationActivity({ ...base, tools: {} }, []).repairs).toBe(0);
+  expect(
+    evaluationActivity(base, [
+      {
+        id: 'failed',
+        name: 'aorchestra_task',
+        state: { status: 'error', input: { operation: 'repair' } },
+      },
+    ]).repairs,
+  ).toBeNull();
+});
+
+test('paired order alternates and performance smoke validation requires both protocols', async () => {
+  const { evaluationOrder, smokeCompatible } = await import('../scripts/eval-fixture');
+  expect(evaluationOrder(3, 'both')).toEqual([
+    { repeat: 1, strategies: ['direct', 'selective'] },
+    { repeat: 2, strategies: ['selective', 'direct'] },
+    { repeat: 3, strategies: ['direct', 'selective'] },
+  ]);
+  expect(evaluationOrder(2, 'selective')).toEqual([
+    { repeat: 1, strategies: ['selective'] },
+    { repeat: 2, strategies: ['selective'] },
+  ]);
+  const smoke = {
+    conditions: { phase: 'smoke', harnessSourceSHA256: 'source' },
+    results: [row(), row({ strategy: 'selective' })],
+  };
+  expect(smokeCompatible(smoke, 'matched', 'source')).toBe(true);
+  expect(smokeCompatible({ ...smoke, results: [row()] }, 'matched', 'source')).toBe(false);
+  expect(smokeCompatible(smoke, 'changed', 'source')).toBe(false);
+  expect(smokeCompatible(smoke, 'matched', 'different')).toBe(false);
+  expect(
+    smokeCompatible(
+      { ...smoke, results: [row({ regressionPassed: false }), row({ strategy: 'selective' })] },
+      'matched',
+      'source',
+    ),
+  ).toBe(false);
+  expect(smokeCompatible(null, 'matched', 'source')).toBe(false);
+});
+
+test('native session preparation preserves shared permissions and fails closed on unenforced DIRECT denial', async () => {
+  const { prepareEvaluationSession, evaluationPermissions } = await import('../scripts/eval-usage');
+  const base = [
+    { action: '*', resource: '*', effect: 'ask' as const },
+    { action: 'read', resource: '*', effect: 'allow' as const },
+    { action: 'aorchestra_delegate', resource: '*', effect: 'allow' as const },
+  ];
+  expect(evaluationPermissions(base, 'selective')).toEqual(base);
+  expect(evaluationPermissions(base, 'direct').slice(0, base.length)).toEqual(base);
+  expect(base).toHaveLength(3);
+  const created: any[] = [];
+  let closes = 0;
+  let enforced = true;
+  const connect: NonNullable<Parameters<typeof prepareEvaluationSession>[4]> = async () => ({
+    client: {
+      location: { get: async () => ({}) },
+      plugin: { list: async () => ({ data: [{ id: 'aorchestra', state: { status: 'active' } }] }) },
+      agent: { list: async () => ({ data: [{ id: 'aorchestra', permissions: base }] }) },
+      config: { get: async () => [{ type: 'document', info: { model: 'test/model' } }] },
+      session: {
+        update: async ({ permissions }: any) => {
+          created[created.length - 1].permissions = permissions;
+        },
+        create: async (input: any) => {
+          created.push(input);
+          return { id: 'primary' };
+        },
+      },
+      permission: { create: async () => ({ effect: enforced ? 'deny' : 'allow' }) },
+    } as any,
+    close: async () => {
+      closes++;
+    },
+  });
+  const direct = await prepareEvaluationSession('fixture', {}, 'direct', 'test/model', connect);
+  const selective = await prepareEvaluationSession(
+    'fixture',
+    {},
+    'selective',
+    'test/model',
+    connect,
+  );
+  expect(direct.settings).toEqual(selective.settings);
+  expect(created[0].model).toEqual(created[1].model);
+  expect(created[0].permissions.slice(-2)).toEqual([
+    { action: 'aorchestra_delegate', resource: '*', effect: 'deny' },
+    { action: 'subagent', resource: '*', effect: 'deny' },
+  ]);
+  expect(created[1].permissions).toEqual(base);
+  enforced = false;
+  await expect(
+    prepareEvaluationSession('fixture', {}, 'direct', 'test/model', connect),
+  ).rejects.toThrow('EVALUATION_DIRECT_PERMISSION_NOT_ENFORCED');
+  expect(closes).toBe(3);
+});
+
+test('native reconciliation distinguishes complete costs from absent tokens and interrupted lifecycle', async () => {
+  const { Telemetry } = await import('../lib/telemetry');
+  const data = new Map<string, unknown>();
+  const telemetry = new Telemetry({
+    get: async (k) => data.get(k),
+    set: async (k, v) => {
+      data.set(k, v);
+    },
+    scan: async () => ({ entries: [] }),
+  });
+  const missing = {
+    cost: 0,
+    input: null,
+    output: null,
+    reasoning: null,
+    cacheRead: null,
+    cacheWrite: null,
+  };
+  await telemetry.begin('primary', 1, missing);
+  await telemetry.finish('primary', 'succeeded', { ...missing, cost: 2 }, [], 'end', 2);
+  const record = [...data.entries()].find(([key]) => key.startsWith('metrics/run/'))![1] as Run;
+  const observed = reconcileEvaluation('primary', [record], [{ id: 'primary' }]);
+  expect(observed.complete).toBe(false);
+  expect(observed.costComplete).toBe(true);
+  expect(observed.usage.totalTokens).toBeNull();
+  expect(observed.usage.costUSD).toBe(2);
+  expect(
+    reconcileEvaluation(
+      'primary',
+      [{ ...record, runtimeOutcome: 'interrupted' }],
+      [{ id: 'primary' }],
+    ).costComplete,
+  ).toBe(false);
 });

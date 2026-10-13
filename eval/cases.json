@@ -33,6 +33,87 @@
       },
       "allowedChanges": ["version.js", "version.test.js"],
       "assertions": "const {nextVersion}=await import('./version.js'); assert.equal(nextVersion('9'),10); assert.equal(nextVersion(9),10); assert.equal(nextVersion('0'),1); assert.equal(nextVersion(0),1);"
+    },
+    {
+      "id": "brownfield-cache-falsy",
+      "task": "The memoizer recomputes cached falsy results. Cache each key once, including undefined; preserve key identity and separate memoizer instances. Preserve existing conventions and tests. Verify your work. Allowed changes: memo.js, regression.test.js.",
+      "files": {
+        "package.json": "{\"type\": \"module\", \"scripts\": {\"test\": \"node regression.test.js\"}}\n",
+        "AGENTS.md": "Use ES modules and node:assert/strict. Preserve exports and caller data. Run npm run test.\n",
+        "memo.js": "export function memoize(fn) { const cache=new Map(); return key => { if (!cache.get(key)) cache.set(key,fn(key)); return cache.get(key); }; }\n",
+        "regression.test.js": "import assert from 'node:assert/strict'; import {memoize} from './memo.js'; assert.equal(memoize(x=>x*2)(3),6);\n"
+      },
+      "allowedChanges": ["memo.js", "regression.test.js"],
+      "assertions": "const {memoize}=await import('./memo.js'); for(const value of [0,false,'',undefined,null,7]) { let calls=0; const f=memoize(()=>{calls++;return value}); assert.equal(f('x'),value); assert.equal(f('x'),value); assert.equal(calls,1); } let n=0; const f=memoize(()=>++n); const a={},b={}; assert.equal(f(a),1); assert.equal(f(b),2); assert.equal(f(a),1); assert.equal(memoize(()=>9)(a),9);"
+    },
+    {
+      "id": "brownfield-pagination",
+      "task": "List and export consumers must agree on page boundaries: pages start at 1 and sizes count rows. Repair pagination without changing the public response shapes or mutating input. Preserve existing conventions and tests. Verify your work. Allowed changes: paging.js, list.js, export.js, regression.test.js.",
+      "files": {
+        "package.json": "{\"type\": \"module\", \"scripts\": {\"test\": \"node regression.test.js\"}}\n",
+        "AGENTS.md": "Use ES modules and node:assert/strict. Preserve exports and caller data. Run npm run test.\n",
+        "paging.js": "export const page=(rows,n,size)=>rows.slice(n*size,n*size+size);\n",
+        "list.js": "import {page} from './paging.js'; export const list=(rows,n,size)=>({items:page(rows,n,size),total:rows.length});\n",
+        "export.js": "import {page} from './paging.js'; export const exportPage=(rows,n,size)=>page(rows,n,size).join(',');\n",
+        "regression.test.js": "import assert from 'node:assert/strict'; import {list} from './list.js'; assert.equal(list([1,2,3],1,2).total,3);\n"
+      },
+      "allowedChanges": ["paging.js", "list.js", "export.js", "regression.test.js"],
+      "assertions": "const {list}=await import('./list.js'); const {exportPage}=await import('./export.js'); const rows=[1,2,3,4,5]; assert.deepEqual(list(rows,1,2),{items:[1,2],total:5}); assert.deepEqual(list(rows,3,2),{items:[5],total:5}); assert.deepEqual(list(rows,4,2),{items:[],total:5}); assert.equal(exportPage(rows,2,2),'3,4'); assert.equal(exportPage([],1,2),''); assert.deepEqual(rows,[1,2,3,4,5]);"
+    },
+    {
+      "id": "brownfield-api-options",
+      "task": "Extend greet(name, options) to support an options object with prefix while preserving the legacy positional prefix string, omitted prefix and explicit empty prefix. Preserve existing conventions and tests. Verify your work. Allowed changes: greet.js, regression.test.js.",
+      "files": {
+        "package.json": "{\"type\": \"module\", \"scripts\": {\"test\": \"node regression.test.js\"}}\n",
+        "AGENTS.md": "Use ES modules and node:assert/strict. Preserve exports and caller data. Run npm run test.\n",
+        "greet.js": "export function greet(name,prefix='Hello') { return `${prefix} ${name}`; }\n",
+        "consumer.js": "import {greet} from './greet.js'; export const welcome=name=>greet(name,'Welcome');\n",
+        "regression.test.js": "import assert from 'node:assert/strict'; import {welcome} from './consumer.js'; assert.equal(welcome('Ada'),'Welcome Ada');\n"
+      },
+      "allowedChanges": ["greet.js", "regression.test.js"],
+      "assertions": "const {greet}=await import('./greet.js'); const {welcome}=await import('./consumer.js'); assert.equal(greet('Ada'),'Hello Ada'); assert.equal(greet('Ada',''),' Ada'); assert.equal(greet('Ada',{prefix:'Hi'}),'Hi Ada'); assert.equal(greet('Ada',{}),'Hello Ada'); assert.equal(greet('Ada',{prefix:''}),' Ada'); assert.equal(welcome('Ada'),'Welcome Ada');"
+    },
+    {
+      "id": "brownfield-refactor-labels",
+      "task": "Remove duplicated label normalization from the two adapters by sharing one implementation in labels.js. Preserve trimming, case normalization, order, duplicates and exports. No new files. Preserve existing conventions and tests. Verify your work. Allowed changes: labels.js, search.js, index.js, regression.test.js.",
+      "files": {
+        "package.json": "{\"type\": \"module\", \"scripts\": {\"test\": \"node regression.test.js\"}}\n",
+        "AGENTS.md": "Use ES modules and node:assert/strict. Preserve exports and caller data. Run npm run test.\n",
+        "labels.js": "export const label=x=>String(x).trim().toLowerCase();\n",
+        "search.js": "export const searchLabels=xs=>xs.map(x=>String(x).trim().toLowerCase());\n",
+        "index.js": "export const indexLabels=xs=>xs.map(x=>String(x).trim().toLowerCase());\n",
+        "regression.test.js": "import assert from 'node:assert/strict'; import {label} from './labels.js'; assert.equal(label(' A '),'a');\n"
+      },
+      "allowedChanges": ["labels.js", "search.js", "index.js", "regression.test.js"],
+      "assertions": "const {label}=await import('./labels.js'); const {searchLabels}=await import('./search.js'); const {indexLabels}=await import('./index.js'); const xs=Object.freeze([' A ',0,null,'A','']); const expected=['a','0','null','a','']; assert.deepEqual(searchLabels(xs),expected); assert.deepEqual(indexLabels(xs),expected); assert.equal(label(' X '),'x'); const {readFile}=await import('node:fs/promises'); for(const file of ['search.js','index.js']) { const text=await readFile(file,'utf8'); assert.match(text,/from\\s*['\"]\\.\\/labels\\.js['\"]/); assert.doesNotMatch(text,/\\.trim\\s*\\(|\\.toLowerCase\\s*\\(/); }"
+    },
+    {
+      "id": "brownfield-analysis-callers",
+      "task": "Analyze the exported parse function: identify all direct caller files and which callers handle its null result. Independently inspect configuration defaults: identify exported settings that use truthiness and discard zero. Write findings.json with sorted arrays callers, nullSafeCallers and zeroDiscardingSettings. Source files are read-only. Preserve existing conventions and tests. Verify your work. Allowed changes: findings.json.",
+      "files": {
+        "package.json": "{\"type\": \"module\", \"scripts\": {\"test\": \"node regression.test.js\"}}\n",
+        "AGENTS.md": "Use ES modules and node:assert/strict. Preserve exports and caller data. Run npm run test.\n",
+        "parse.js": "export const parse=x=>/^\\d+$/.test(x)?Number(x):null;\n",
+        "safe.js": "import {parse} from './parse.js'; export const safe=x=>parse(x) ?? -1;\n",
+        "unsafe.js": "import {parse} from './parse.js'; export const unsafe=x=>parse(x)+1;\n",
+        "config.js": "export const timeout=x=>x || 50; export const retries=x=>x ?? 2;\n",
+        "regression.test.js": "import assert from 'node:assert/strict'; import {safe} from './safe.js'; assert.equal(safe('bad'),-1);\n"
+      },
+      "allowedChanges": ["findings.json"],
+      "assertions": "const {readFile}=await import('node:fs/promises'); const f=JSON.parse(await readFile('findings.json','utf8')); assert.deepEqual(f,{callers:['safe.js','unsafe.js'],nullSafeCallers:['safe.js'],zeroDiscardingSettings:['timeout']}); const {safe}=await import('./safe.js'); assert.equal(safe('bad'),-1);"
+    },
+    {
+      "id": "brownfield-sort-copy",
+      "task": "sortedScores must sort numerically in ascending order without modifying caller arrays. Preserve duplicate scores and empty-array behavior. Preserve existing conventions and tests. Verify your work. Allowed changes: scores.js, regression.test.js.",
+      "files": {
+        "package.json": "{\"type\": \"module\", \"scripts\": {\"test\": \"node regression.test.js\"}}\n",
+        "AGENTS.md": "Use ES modules and node:assert/strict. Preserve exports and caller data. Run npm run test.\n",
+        "scores.js": "export const sortedScores=xs=>xs.sort();\n",
+        "leaderboard.js": "import {sortedScores} from './scores.js'; export const lowest=xs=>sortedScores(xs)[0] ?? null;\n",
+        "regression.test.js": "import assert from 'node:assert/strict'; import {lowest} from './leaderboard.js'; assert.equal(lowest([2,1]),1);\n"
+      },
+      "allowedChanges": ["scores.js", "regression.test.js"],
+      "assertions": "const {sortedScores}=await import('./scores.js'); const {lowest}=await import('./leaderboard.js'); const xs=Object.freeze([10,2,-1,2]); assert.deepEqual(sortedScores(xs),[-1,2,2,10]); assert.deepEqual(xs,[10,2,-1,2]); assert.deepEqual(sortedScores([]),[]); assert.equal(lowest([]),null); assert.equal(lowest(xs),-1);"
     }
   ]
 }
