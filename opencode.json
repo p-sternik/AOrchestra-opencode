@@ -16,7 +16,8 @@
         "maxDelegations": 8,
         "maxAttempts": 2,
         "timeoutMs": 600000,
-        "maxSessionTokens": 300000,
+        "maxSessionTokens": null,
+        "sessionUsageWarningTokens": 300000,
         "snapshotIgnore": [],
         "telemetry": true
       }

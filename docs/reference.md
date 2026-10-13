@@ -229,11 +229,23 @@ code and add the task ID and recovery guidance. `resume` lists pending predicate
 checks interrupted by plugin restart need a new observed before/after pair. Guidance
 does not execute operations or reset budgets, receipts or acceptance rules.
 
-Status also returns `tokenBudget` (limit, consumed, remaining and nearLimit) for the
-primary native session. At 80% of the limit, primary and executor context hooks add
-a warning before model dispatch. All native token categories count; absent counters
-keep consumed/remaining/nearLimit unknown rather than inventing zero. This remains
-a per-session safeguard, not a whole-workflow cost cap.
+Status returns `tokenBudget` (`limit`, `consumed`, `remaining`, `nearLimit` and
+`warningTokens`) for the primary native session. These are cumulative session usage
+counters, including reasoning and cache, not the size of the current request or
+context window. OpenCode manages context limits and compaction.
+
+`maxSessionTokens` is an optional positive integer usage hard limit; omitted or
+`null` disables the hard stop. Existing explicit numeric values retain their
+per-session spending semantics for both primary and executor sessions. They are
+not a whole-workflow cost cap. At the limit, dispatch fails with
+`SESSION_TOKEN_BUDGET_EXCEEDED`. Existing installations with a numeric value must
+remove it or set it to `null` to disable that safeguard.
+
+`sessionUsageWarningTokens` is a positive integer warning threshold, default
+300,000 without a hard limit, or 80% of an explicit limit rounded up. Primary and
+executor context hooks warn about spending at that threshold without blocking.
+Absent counters keep consumed/remaining/nearLimit unknown; an unlimited budget
+also has unknown remaining capacity. Reporting retains measured zero.
 
 The existing single-task delegate input/result is unchanged. For a group, supply
 at least two unique registered analysis IDs with their usual routing fields.
@@ -472,6 +484,11 @@ cases separate from holdout cases; do not tune on holdout outcomes. Adopt only w
 criteria are met, reject demonstrated regressions or missing benefits, and mark
 missing measurements or inadequate comparisons inconclusive. No policy is adopted
 automatically. See the skill's [experiment guidance](../skills/improve/references/experiments.md).
+
+Evaluation success requires an explicit `succeeded` runtime outcome, passing
+independent behavior and scope checks, and the strategy policy. Results expose
+`executionConfirmed` separately from `behaviorPassed`, `scopePassed` and
+`usageComplete`; missing usage does not itself reject confirmed success.
 
 The existing three-case evaluation suite is smoke coverage. Its runner reconciles
 native workflow usage as described [below](#validation-and-evaluation); missing

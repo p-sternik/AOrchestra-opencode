@@ -198,8 +198,14 @@ export default Plugin.define({
     };
     const maxDelegations = limit('maxDelegations', 8),
       maxAttempts = limit('maxAttempts', 2),
-      timeoutMs = limit('timeoutMs', 600_000),
-      maxSessionTokens = limit('maxSessionTokens', 300_000);
+      timeoutMs = limit('timeoutMs', 600_000);
+    // Historical usage is a spending safeguard, never a context-window estimate.
+    const maxSessionTokens =
+      options.maxSessionTokens == null ? null : limit('maxSessionTokens', 300_000);
+    const sessionUsageWarningTokens = limit(
+      'sessionUsageWarningTokens',
+      maxSessionTokens === null ? 300_000 : Math.max(1, Math.ceil(maxSessionTokens * 0.8)),
+    );
     const maxRepairs = limit('maxRepairs', 2),
       maxConcurrentAnalyses = limit('maxConcurrentAnalyses', 1);
     const verificationRules = validateVerificationRules(options.verification);
@@ -237,8 +243,12 @@ export default Plugin.define({
       return {
         limit: maxSessionTokens,
         consumed,
-        remaining: consumed === null ? null : Math.max(0, maxSessionTokens - consumed),
-        nearLimit: consumed === null ? null : consumed >= maxSessionTokens * 0.8,
+        remaining:
+          consumed === null || maxSessionTokens === null
+            ? null
+            : Math.max(0, maxSessionTokens - consumed),
+        nearLimit: consumed === null ? null : consumed >= sessionUsageWarningTokens,
+        warningTokens: sessionUsageWarningTokens,
       };
     };
     // Only an observed before/after pair can attest to a stable source snapshot.
@@ -561,14 +571,18 @@ export default Plugin.define({
           );
         });
         const budget = tokenBudget(session);
-        if (budget.consumed !== null && budget.consumed >= maxSessionTokens)
+        if (
+          maxSessionTokens !== null &&
+          budget.consumed !== null &&
+          budget.consumed >= maxSessionTokens
+        )
           throw new Error(
-            `SESSION_TOKEN_BUDGET_EXCEEDED: consumed=${budget.consumed}, limit=${budget.limit}, remaining=${budget.remaining}. Inspect task status and retained changes; this session cannot dispatch another model response.`,
+            `SESSION_TOKEN_BUDGET_EXCEEDED: consumed=${budget.consumed}, limit=${budget.limit}, remaining=${budget.remaining}. Explicit session usage limit reached; this is not a context-window limit. Inspect task status and retained changes; this session cannot dispatch another model response.`,
           );
         if (budget.nearLimit)
           event.system.push({
             type: 'text',
-            text: `AOrchestra session token budget is near exhaustion (includes reasoning and cache): ${JSON.stringify(budget)}. Finish bounded work and report unfinished tasks before the next dispatch reaches the limit.`,
+            text: `AOrchestra session usage is high (cumulative tokens, including reasoning and cache): ${JSON.stringify(budget)}. Review spending and unfinished work. Historical usage does not measure the current context window; OpenCode manages context and compaction.`,
           });
         if (event.agent === 'aorchestra') {
           const state = await ledger.read(event.sessionID);

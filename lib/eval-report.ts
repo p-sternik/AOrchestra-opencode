@@ -7,6 +7,7 @@ export interface EvaluationResult {
   strategy: Strategy;
   repeat: number;
   passed: boolean;
+  executionConfirmed: boolean;
   behaviorPassed: boolean;
   scopePassed: boolean;
   changedPaths: string[];
@@ -28,6 +29,22 @@ export interface EvaluationResult {
   error: string | null;
   independentCheck: string;
   workspace: string;
+}
+
+export function evaluationOutcome(
+  result: Pick<EvaluationResult, 'runtimeOutcome' | 'error' | 'behaviorPassed' | 'scopePassed'>,
+  policyPassed: boolean,
+) {
+  const executionConfirmed = result.runtimeOutcome === 'succeeded';
+  return {
+    executionConfirmed,
+    passed:
+      executionConfirmed &&
+      !result.error &&
+      result.behaviorPassed &&
+      result.scopePassed &&
+      policyPassed,
+  };
 }
 
 export interface NativeSessionLink {

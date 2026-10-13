@@ -3,6 +3,7 @@ import {
   comparison,
   evaluationMarkdown,
   evaluationPolicy,
+  evaluationOutcome,
   reconcileEvaluation,
   type EvaluationResult,
 } from '../lib/eval-report';
@@ -14,6 +15,7 @@ const row = (overrides: Partial<EvaluationResult> = {}): EvaluationResult => ({
   strategy: 'direct',
   repeat: 1,
   passed: true,
+  executionConfirmed: true,
   behaviorPassed: true,
   scopePassed: true,
   changedPaths: [],
@@ -252,4 +254,25 @@ test('native reconciliation exhausts boundary cursors and paginated telemetry wi
   await expect(
     readEvaluationUsage('fixture', {}, '{"sessionID":"different"}', connect),
   ).rejects.toThrow('EVALUATION_TRAJECTORY_SESSION_MISMATCH');
+});
+
+test('evaluation requires explicit runtime success independently of usage coverage', () => {
+  for (const runtimeOutcome of [null, 'running', 'failed', 'interrupted', 'succeeded'] as const) {
+    const result = row({ runtimeOutcome, usageComplete: false, totalWorkflowCost: null });
+    expect(evaluationOutcome(result, true)).toEqual({
+      executionConfirmed: runtimeOutcome === 'succeeded',
+      passed: runtimeOutcome === 'succeeded',
+    });
+  }
+  for (const overrides of [
+    { error: 'CLI failed' },
+    { behaviorPassed: false },
+    { scopePassed: false },
+  ]) {
+    expect(evaluationOutcome(row(overrides), true)).toEqual({
+      executionConfirmed: true,
+      passed: false,
+    });
+  }
+  expect(evaluationOutcome(row(), false)).toEqual({ executionConfirmed: true, passed: false });
 });

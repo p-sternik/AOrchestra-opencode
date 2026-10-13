@@ -544,3 +544,33 @@ Markdown retains double quotes in skill front matter for the existing JSON-strin
 loader. The initial formatting pass spans existing source and documentation;
 formatting checks do not establish semantic effectiveness or provider isolation.
 No paid evaluation or release ran.
+
+## PR #20 usage and evaluation corrections
+
+Local Linux checks on 2026-10-13 with Bun 1.2.15: typecheck, **151 harness
+tests (971 assertions)**, **13 Python helper tests**, three-case evaluation corpus
+validation, version consistency, formatting, production package installation/import/CLI/TUI
+rendering, changed-document local links and diff checks passed. The repository-profile OpenCode 2.0.26
+smoke passed with **zero model calls**, including three native read-only children.
+
+New controlled regressions allow 347,000 historical tokens without a default
+hard stop, preserve explicit numeric usage limits for primary and executor, and
+keep absent counters distinct from measured zero. Warnings describe cumulative
+usage rather than context exhaustion. Evaluation requires explicit runtime success
+and reports execution confirmation separately from behavior, scope and usage
+coverage. Unknown or non-success outcomes cannot pass independent assertions into
+an overall success; missing usage alone does not reject confirmed success.
+
+Extended epoch tests reject late failures after fresh acceptance following
+invalidation or recovery. A deterministic two-slot test holds both children at
+barriers, rejects a third analysis and exclusive edits, denies read-only worker
+writes, and observes one worker remaining active after its sibling fails. Existing
+regressions continue to cover restart, workdir mismatch, source mutation, durable
+repair requirements/budgets and recovery attempting every interruption despite
+failures. No verification state or lock was added.
+
+These are controlled lifecycle checks and a native no-inference smoke, not a
+successful provider-backed concurrent execution or an effectiveness/isolation
+claim. Remote CI and Windows were not run locally. Large-JSON handling remains a
+separate follow-up; these corrections do not establish native large-file limits
+or solve actual context overflow. No paid evaluation, release or PR merge ran.

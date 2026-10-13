@@ -273,7 +273,9 @@ test('invalidation and recovery reject check results from the previous execution
         status: 'completed',
         result: { metadata: { exitCode: 0 } },
       };
+      const lateFailure = { ...event, id: 'old-failure', result: { metadata: { exitCode: 1 } } };
       await f.hooks.get('tool:execute.before')!(event);
+      await f.hooks.get('tool:execute.before')!(lateFailure);
       await f.invoke('aorchestra_task', {
         operation,
         taskId: 'api',
@@ -288,6 +290,9 @@ test('invalidation and recovery reject check results from the previous execution
       await expect(f.accept()).rejects.toThrow('VERIFIER_MISSING_OR_STALE');
       await f.verify();
       await f.accept();
+      const accepted = (await new Ledger(f.ctx.storage).read('primary')).tasks[0];
+      await f.hooks.get('tool:execute.after')!(lateFailure);
+      expect((await new Ledger(f.ctx.storage).read('primary')).tasks[0]).toEqual(accepted);
     } finally {
       await f.clean();
     }
@@ -2166,11 +2171,17 @@ test('status exposes measured and unknown budgets; primary and executor receive 
     const measured = JSON.parse(
       (await f.invoke('aorchestra_task', { operation: 'status' })).content,
     ).tokenBudget;
-    expect(measured).toEqual({ limit: 100, consumed: 80, remaining: 20, nearLimit: true });
+    expect(measured).toEqual({
+      limit: 100,
+      consumed: 80,
+      remaining: 20,
+      nearLimit: true,
+      warningTokens: 80,
+    });
     f.ctx.session.get = async (input) => ({ ...(await get(input)), tokens: {} as any });
     expect(
       JSON.parse((await f.invoke('aorchestra_task', { operation: 'status' })).content).tokenBudget,
-    ).toEqual({ limit: 100, consumed: null, remaining: null, nearLimit: null });
+    ).toEqual({ limit: 100, consumed: null, remaining: null, nearLimit: null, warningTokens: 80 });
     f.ctx.session.get = async (input) => ({
       ...(await get(input)),
       tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
@@ -2239,6 +2250,148 @@ test('guidance preserves dependency and exhausted-repair blocks across restart',
     expect(await new Ledger(f.ctx.storage).read('primary')).toEqual(before);
   } finally {
     if (cleanup!) await cleanup();
+    await f.clean();
+  }
+});
+
+test('historical usage never blocks dispatch by default or with a null limit', async () => {
+  for (const options of [{}, { maxSessionTokens: null }]) {
+    const f = await fixture(options);
+    try {
+      const get = f.ctx.session.get;
+      for (const inputTokens of [290_000, 347_000, 10]) {
+        f.ctx.session.get = async (input) => ({
+          ...(await get(input)),
+          tokens: { input: inputTokens, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+        });
+        const context = {
+          agent: 'aorchestra',
+          sessionID: 'primary',
+          tools: {},
+          options: {},
+          system: [] as any[],
+          model: { providerID: 'test', id: 'model' },
+        };
+        await f.hooks.get('session:context')!(context);
+        const budget = JSON.parse(
+          (await f.invoke('aorchestra_task', { operation: 'status' })).content,
+        ).tokenBudget;
+        expect(budget).toEqual({
+          limit: null,
+          consumed: inputTokens,
+          remaining: null,
+          nearLimit: inputTokens >= 300_000,
+          warningTokens: 300_000,
+        });
+        expect(context.system.some((item) => item.text.includes('session usage is high'))).toBe(
+          inputTokens >= 300_000,
+        );
+      }
+      f.ctx.session.get = async (input) => ({ ...(await get(input)), tokens: {} as any });
+      expect(
+        JSON.parse((await f.invoke('aorchestra_task', { operation: 'status' })).content).tokenBudget
+          .consumed,
+      ).toBeNull();
+    } finally {
+      await f.clean();
+    }
+  }
+});
+
+test('usage options validate explicit limits and independent warning thresholds', async () => {
+  for (const name of ['maxSessionTokens', 'sessionUsageWarningTokens']) {
+    for (const value of [0, -1, 1.5, '300000', false]) {
+      await expect(fixture({ [name]: value })).rejects.toThrow(`INVALID_OPTION: ${name}`);
+    }
+  }
+  const f = await fixture({ sessionUsageWarningTokens: 10 });
+  try {
+    const context = {
+      agent: 'aorchestra',
+      sessionID: 'primary',
+      tools: {},
+      options: {},
+      system: [] as any[],
+      model: { providerID: 'test', id: 'model' },
+    };
+    await f.hooks.get('session:context')!(context);
+    expect(context.system.some((item) => item.text.includes('session usage is high'))).toBe(true);
+  } finally {
+    await f.clean();
+  }
+});
+
+test('two analysis slots overlap, deny writes and preserve a running sibling after failure', async () => {
+  const f = await fixture({ maxConcurrentAnalyses: 2 });
+  const gates = new Map<string, { resolve: () => void; reject: (error: Error) => void }>();
+  let entered = () => {};
+  let failed = () => {};
+  const bothEntered = new Promise<void>((resolve) => {
+    entered = resolve;
+  });
+  const failureRecorded = new Promise<void>((resolve) => {
+    failed = resolve;
+  });
+  try {
+    await registerAnalyses(f, ['a', 'b', 'c']);
+    await f.register();
+    const storage = f.ctx.storage as { set(key: string, value: unknown): Promise<void> };
+    const set = storage.set.bind(storage);
+    storage.set = async (key, value) => {
+      await set(key, value);
+      if (key === 'child/child-1' && !(value as any).active) failed();
+    };
+    f.ctx.session.wait = async ({ sessionID }) =>
+      new Promise<void>((resolve, reject) => {
+        gates.set(sessionID, { resolve, reject });
+        if (gates.size === 2) entered();
+      });
+    const group = f.invoke('aorchestra_delegate', { tasks: ['a', 'b'].map(delegateItem) });
+    await bothEntered;
+    expect(f.prompts).toHaveLength(2);
+    await expect(f.invoke('aorchestra_delegate', delegateItem('c'))).rejects.toThrow(
+      'ANALYSIS_CONCURRENCY_EXCEEDED',
+    );
+    await expect(f.start()).rejects.toThrow('ACTIVE_TASK_EXISTS');
+    for (const sessionID of gates.keys()) {
+      const permission = {
+        agent: 'aorchestra-executor',
+        sessionID,
+        action: 'edit',
+        resources: ['api.ts'],
+        effect: 'allow',
+      };
+      await f.hooks.get('permission:evaluate')!(permission);
+      expect(permission.effect).toBe('deny');
+      await expect(
+        f.hooks.get('tool:execute.before')!({
+          agent: 'aorchestra-executor',
+          sessionID,
+          tool: 'patch',
+          id: 'denied-write',
+          input: {},
+        }),
+      ).rejects.toThrow('WORKER_TOOL_DENIED');
+    }
+    gates.get('child-1')!.reject(new Error('controlled child failure'));
+    await failureRecorded;
+    expect(
+      (await new Ledger(f.ctx.storage).read('primary')).tasks
+        .slice(0, 2)
+        .map((task) => task.status),
+    ).toEqual(['blocked', 'running']);
+    expect(((await f.ctx.storage.get('child/child-2')) as any).active).toBe(true);
+    gates.get('child-2')!.resolve();
+    const results = JSON.parse((await group).content).results;
+    expect(results[0].error).toBe('controlled child failure');
+    expect(results[1].error).toBeUndefined();
+    expect(
+      (await new Ledger(f.ctx.storage).read('primary')).tasks
+        .slice(0, 2)
+        .map((task) => task.status),
+    ).toEqual(['blocked', 'review']);
+  } finally {
+    for (const gate of gates.values()) gate.resolve();
     await f.clean();
   }
 });

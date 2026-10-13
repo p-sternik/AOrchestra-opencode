@@ -7,6 +7,7 @@ import {
   comparison,
   evaluationMarkdown,
   evaluationPolicy,
+  evaluationOutcome,
   type EvaluationResult,
   type Strategy,
 } from '../lib/eval-report';
@@ -174,14 +175,10 @@ for (const strategy of selected === 'both' ? ['direct', 'selective'] : [selected
         id: c.id,
         strategy: strategy as Strategy,
         repeat: repeat + 1,
-        passed:
-          !error &&
-          runtimeOutcome !== 'failed' &&
-          runtimeOutcome !== 'interrupted' &&
-          runtimeOutcome !== 'running' &&
-          checks.passed &&
-          scoped &&
+        ...evaluationOutcome(
+          { runtimeOutcome, error, behaviorPassed: checks.passed, scopePassed: scoped },
           policyPassed,
+        ),
         behaviorPassed: checks.passed,
         scopePassed: scoped,
         changedPaths: changes,
