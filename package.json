@@ -1,6 +1,6 @@
 {
   "name": "aorchestra-opencode-v2",
-  "version": "0.6.1",
+  "version": "0.7.0",
   "type": "module",
   "description": "A brownfield harness for OpenCode V2 with selective delegation and global setup.",
   "repository": {
