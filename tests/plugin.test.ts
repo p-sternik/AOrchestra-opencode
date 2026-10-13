@@ -247,6 +247,74 @@ test('failed native rerun revokes a previous successful receipt on the same sour
   }finally{await f.clean();}
 });
 
+test('a matching root package command in another package cannot accept or revoke root evidence',async()=>{
+  const f=await fixture();try {
+    await writeFile(join(f.root,'package.json'),JSON.stringify({scripts:{test:'node --test'}}));
+    await mkdir(join(f.root,'other'));
+    await writeFile(join(f.root,'other/package.json'),JSON.stringify({scripts:{test:'node --test'}}));
+    await f.register();await f.start();await f.verify();
+    const ledger=new Ledger(f.ctx.storage);
+    const generated=(await ledger.read('primary')).tasks[0].verification!.verifiers[0];
+    expect(generated.input.workdir).toBe(f.root);
+    const outcome=(exitCode:number,workdir:string)=>f.hooks.get('tool:execute.after')!({tool:'shell',agent:'aorchestra',sessionID:'primary',id:`workdir-${exitCode}`,input:{command:'npm run test',workdir},status:'completed',result:{metadata:{exitCode}}});
+    await outcome(0,join(f.root,'other'));
+    await expect(f.accept()).rejects.toThrow('VERIFIER_MISSING_OR_STALE');
+    expect((await ledger.read('primary')).tasks[0].receipts[generated.id]).toBeUndefined();
+    await outcome(0,f.root);await f.accept();
+    await outcome(1,join(f.root,'other'));
+    expect((await ledger.read('primary')).tasks[0].status).toBe('complete');
+    await outcome(1,f.root);
+    expect((await ledger.read('primary')).tasks[0].status).toBe('blocked');
+  }finally{await f.clean();}
+});
+
+test('failed DIRECT verification cannot recover, restart or invalidate around bounded repairs',async()=>{
+  const f=await fixture({maxRepairs:2});try {
+    await f.register();await f.start();
+    const ledger=new Ledger(f.ctx.storage);
+    for(let cycle=0;cycle<2;cycle++) {
+      await f.verify(1);
+      await f.invoke('aorchestra_task',{operation:'recover'});
+      const before=await ledger.read('primary');
+      expect(before.tasks[0].workflow!.repairRequired).toBe(true);
+      expect(before.tasks[0].workflow!.repairs).toBe(cycle);
+      const cleanup=await plugin.setup(f.ctx);
+      try {
+        await f.invoke('aorchestra_task',{operation:'resume',taskId:'api'});
+        expect(await ledger.read('primary')).toEqual(before);
+        await expect(f.start()).rejects.toThrow('BEGIN_REPAIR_BEFORE_RESTART');
+        await expect(f.invoke('aorchestra_task',{operation:'plan',taskId:'api'})).rejects.toThrow('BEGIN_REPAIR_BEFORE_RESTART');
+        await expect(f.invoke('aorchestra_delegate',{taskId:'api',model:'fast',tools:['read'],routingEvidence:'Retry known-file inspection',delta:'Observed failing verifier'})).rejects.toThrow('BEGIN_REPAIR_BEFORE_RESTART');
+        await f.invoke('aorchestra_task',{operation:'repair',taskId:'api',reason:`Observed failure ${cycle+1}`});
+        const task=(await ledger.read('primary')).tasks[0];
+        expect(task.workflow!.repairs).toBe(cycle+1);
+        expect(task.workflow!.repairRequired).toBeUndefined();
+      }finally{if(cleanup)await cleanup();}
+    }
+    await f.verify(1);await f.invoke('aorchestra_task',{operation:'recover'});
+    await expect(f.start()).rejects.toThrow('REPAIR_BUDGET_EXCEEDED');
+    const exhausted=JSON.parse((await f.invoke('aorchestra_task',{operation:'repair',taskId:'api',reason:'Third failure'})).content).tasks[0];
+    expect(exhausted.status).toBe('blocked');expect(exhausted.workflow.repairs).toBe(2);
+    await f.invoke('aorchestra_task',{operation:'invalidate',taskId:'api',reason:'Reinspect assumptions'});
+    expect((await ledger.read('primary')).tasks[0].workflow!.repairRequired).toBe(true);
+    await expect(f.start()).rejects.toThrow('REPAIR_BUDGET_EXCEEDED');
+    expect(f.creations).toHaveLength(0);
+  }finally{await f.clean();}
+});
+
+test('invalidation cannot discard a pending repair obligation before the budget is exhausted',async()=>{
+  const f=await fixture();try {
+    await f.register();await f.start();await f.verify(1);
+    await f.invoke('aorchestra_task',{operation:'invalidate',taskId:'api',reason:'Refresh the plan after failure'});
+    await expect(f.start()).rejects.toThrow('BEGIN_REPAIR_BEFORE_RESTART');
+    await expect(f.invoke('aorchestra_delegate',{taskId:'api',model:'fast',tools:['read'],routingEvidence:'Retry lookup'})).rejects.toThrow('BEGIN_REPAIR_BEFORE_RESTART');
+    await f.invoke('aorchestra_task',{operation:'repair',taskId:'api',reason:'Reinspect failed contract with a new baseline'});
+    await f.verify();await f.accept();
+    const repaired=(await new Ledger(f.ctx.storage).read('primary')).tasks[0];
+    expect(repaired.workflow!.repairs).toBe(1);expect(repaired.status).toBe('complete');
+  }finally{await f.clean();}
+});
+
 test('bounded direct repairs protect edit permissions and cannot restart or invalidate away exhaustion',async()=>{
   const f=await fixture({maxRepairs:2});try{
     await f.register();await f.start();await f.verify(1);
@@ -308,7 +376,9 @@ test('failed or unverifiable reruns revoke accepted work and survive restart wit
       try {
         await f.invoke('aorchestra_task',{operation:'resume',taskId:'api'});
         await f.verify();expect((await ledger.read('primary')).tasks[0]).toEqual(revoked);
-        await f.start();await expect(f.accept()).rejects.toThrow('VERIFIER_MISSING_OR_STALE');
+        await expect(f.start()).rejects.toThrow('BEGIN_REPAIR_BEFORE_RESTART');
+        await f.invoke('aorchestra_task',{operation:'repair',taskId:'api',reason:'Accepted verifier failed; recheck before acceptance'});
+        await expect(f.accept()).rejects.toThrow('VERIFIER_MISSING_OR_STALE');
         await f.verify();await f.accept();expect((await ledger.read('primary')).tasks[0].status).toBe('complete');
       }finally{if(cleanup)await cleanup();}
     }finally{await f.clean();}

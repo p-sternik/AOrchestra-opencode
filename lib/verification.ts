@@ -1,5 +1,5 @@
 import { readFile } from 'node:fs/promises';
-import { posix } from 'node:path';
+import { posix, resolve } from 'node:path';
 import { digest, portablePath, type Task, type Verifier } from './core';
 import { canonicalTarget } from './files';
 
@@ -26,15 +26,18 @@ export function validateVerificationRules(raw: unknown): VerificationRule[] {
   }
   return structuredClone(raw) as VerificationRule[];
 }
-const predicateKey = (v: Verifier) => digest({tool:v.tool,input:Object.fromEntries(Object.entries(v.input).sort()),expect:v.expect});
+const predicateKey = (v: Verifier, root: string) => {
+  const input = v.tool === 'shell' ? {...v.input, workdir:resolve(root,v.input.workdir??'.')} : v.input;
+  return digest({tool:v.tool,input:Object.fromEntries(Object.entries(input).sort()),expect:v.expect});
+};
 
 // Select whole existing scripts, never fabricate framework-specific flags or test paths.
 // No commands run here: the primary invokes these through native tools/permissions.
 export async function verificationPlan(root: string, task: Task, affectedPaths: string[], snapshot: string, rules: VerificationRule[] = []): Promise<VerificationPlan> {
   const plan: VerificationPlan = { snapshot, affectedPaths: [...affectedPaths].sort(), verifiers: [], sources: [], gaps: [], observations: {} };
-  const seen = new Set(task.verifiers.map(predicateKey));
+  const seen = new Set(task.verifiers.map(v => predicateKey(v,root)));
   const add = (v: Verifier) => {
-    const key = predicateKey(v);
+    const key = predicateKey(v,root);
     if (seen.has(key)) return;
     seen.add(key);
     plan.verifiers.push({...v, id:`auto-${key.slice(0,24)}`});
@@ -90,7 +93,7 @@ export async function verificationPlan(root: string, task: Task, affectedPaths: 
           }
           const scripts = ['typecheck', 'lint', 'test'].filter(name => typeof pkg.scripts?.[name] === 'string' && String(pkg.scripts[name]).trim());
           if (!manager || !scripts.length) plan.gaps.push(`${path}: ${!manager ? 'package manager unresolved' : 'no typecheck/lint/test scripts; configure verification rules or task predicates'}`);
-          else for (const name of scripts) add({id:name,tool:'shell',input:{command:`${manager} run ${name}`,...(directory==='.'?{}:{workdir:await canonicalTarget(root,directory)})},expect:{exitCode:0}});
+          else for (const name of scripts) add({id:name,tool:'shell',input:{command:`${manager} run ${name}`,workdir:await canonicalTarget(root,directory)},expect:{exitCode:0}});
         }
         break;
       } catch (error) {

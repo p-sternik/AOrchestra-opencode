@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test';
+import { resolve } from 'node:path';
 import { Ledger, inside, parseResult, permissionRules, ready, registerTask, reserve, validateTools, validateHandoff, verifierPassed, type State, type Task } from '../lib/core';
 const task = (id = 'fix'): Task => ({ id, kind: 'change', instruction: 'Preserve old API and fix the bug', context: '', dependsOn: [], writePaths: ['src/api.ts'], preserve: ['Existing caller remains supported'], verifiers: [{ id: 'tests', tool: 'shell', input: { command: 'bun test tests/api.test.ts' }, expect: { exitCode: 0 } }], status: 'pending', attempts: [], receipts: {} });
 const state = (): State => ({ version: 1, revision: 0, delegations: 0, tasks: [] });
@@ -21,6 +22,18 @@ test('failed or unknown exit code cannot verify a completed native shell call', 
 test('a successful unrelated command is not the declared verifier', () => {
   expect(verifierPassed(task().verifiers[0], { ...event(), input: { command: 'echo tests passed' } })).toBe(false);
   expect(verifierPassed(task().verifiers[0], { ...event(), status: 'error' })).toBe(false);
+});
+test('shell evidence binds omitted and explicit workdirs to the session location', () => {
+  const root = resolve('review-project'), other = resolve(root,'other');
+  const verifier = task().verifiers[0];
+  for (const workdir of [undefined,'.',root]) {
+    expect(verifierPassed(verifier,{...event(),input:{...verifier.input,...(workdir===undefined?{}:{workdir})}},root)).toBe(true);
+  }
+  expect(verifierPassed(verifier,{...event(),input:{...verifier.input,workdir:other}},root)).toBe(false);
+  expect(verifierPassed(verifier,{...event(),input:{...verifier.input,workdir:null}},root)).toBe(false);
+  const nested = {...verifier,input:{...verifier.input,workdir:other}};
+  expect(verifierPassed(nested,event(),root)).toBe(false);
+  expect(verifierPassed(nested,{...event(),input:{...verifier.input,workdir:'other'}},root)).toBe(true);
 });
 test('read verifier requires observed content and matching input', () => {
   const v = { id: 'read', tool: 'read', input: { filePath: 'src/api.ts' }, expect: { contains: 'export function oldApi' } };

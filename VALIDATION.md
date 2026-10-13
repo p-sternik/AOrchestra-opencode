@@ -378,3 +378,26 @@ must confirm those integrations. No release was published, tag changed or
 repository protection setting modified during local verification. Branch rules
 requiring skipped standalone PR checks remain incompatible with the generated
 marker; the automation preserves GitHub's enforcement of those rules.
+
+## Verification and evaluation review regressions
+
+Local Linux checks on 2026-10-13 with Bun 1.2.15, based on main v0.7.0:
+typecheck, **120 harness tests (683 assertions)**, **13 repo-context helper tests**,
+three-case corpus validation, version consistency and production package
+installation/import/CLI/TUI rendering passed. The OpenCode 2.0.26
+repository-profile smoke check passed with **zero model calls**.
+
+New regressions reject root-check evidence from another package without allowing
+an unrelated failed rerun to revoke accepted root evidence. They cover implicit,
+relative and absolute shell directories and predicate deduplication. Controller
+tests exercise failed DIRECT verification through recovery, plugin restart,
+planning, delegation, invalidation and bounded repair, including a new baseline
+after invalidation. Pending repair requirements and consumed budgets persist.
+
+Evaluation tests reject DIRECT delegation observed in native descendants or CLI
+events even when primary telemetry records no children. They deduplicate native
+and recorded child IDs, preserve SELECTIVE behavior and exclude unrelated primary
+records. These are controlled regression checks, not provider-backed evidence of
+effectiveness, cost savings or arbitrary process isolation. Windows checks and
+successful model-backed evaluation remain target-environment work; no paid
+evaluation ran.

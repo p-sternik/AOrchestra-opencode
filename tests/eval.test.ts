@@ -1,7 +1,8 @@
 import {expect,test} from 'bun:test';
-import {comparison,evaluationMarkdown,type EvaluationResult} from '../lib/eval-report';
+import {comparison,evaluationMarkdown,evaluationPolicy,reconcileEvaluation,type EvaluationResult} from '../lib/eval-report';
 import {trajectorySessionIDs} from '../scripts/eval-usage';
 import {fileURLToPath} from 'node:url';
+import type {Run} from '../lib/telemetry';
 const row=(overrides:Partial<EvaluationResult>={}):EvaluationResult=>({id:'case',strategy:'direct',repeat:1,passed:true,behaviorPassed:true,scopePassed:true,changedPaths:[],delegations:0,durationMs:10,totalWorkflowCost:2,totalWorkflowTokens:0,inputTokens:0,outputTokens:0,reasoningTokens:0,cacheReadTokens:0,cacheWriteTokens:0,usageComplete:true,usageIssues:[],missingSessions:[],sessionID:'primary',runID:'run',runtimeOutcome:'succeeded',error:null,independentCheck:'',workspace:'fixture',...overrides});
 
 test('comparison includes costs of failed assertions and only divides complete cohorts',()=>{
@@ -21,6 +22,27 @@ test('known interrupted cost and absent tokens remain observed but comparison is
   expect(comparison([result])[0].totalObservedCostUSD).toBe(4);
   expect(comparison([result])[0].comparisonComplete).toBe(false);
   expect(evaluationMarkdown([result])).toContain('execution-interrupted');
+});
+
+test('DIRECT policy rejects native or CLI delegation even when telemetry records no children',async()=>{
+  const {Telemetry}=await import('../lib/telemetry');
+  const data=new Map<string,unknown>();
+  const telemetry=new Telemetry({get:async k=>data.get(k),set:async(k,v)=>{data.set(k,v);},scan:async()=>({entries:[]})});
+  const zero={cost:0,input:0,output:0,reasoning:0,cacheRead:0,cacheWrite:0};
+  await telemetry.begin('primary',1,zero);await telemetry.finish('primary','succeeded',zero,[],'end',2);
+  const records=[...data.entries()].filter(([key])=>key.startsWith('metrics/run/')).map(([,value])=>value as Run);
+  const family=[{id:'primary'},{id:'child',parentID:'primary'}];
+  expect(reconcileEvaluation('primary',records,family).issues).toContain('unrecorded-native-child:child');
+  expect(evaluationPolicy('direct','primary',records,family,0)).toEqual({delegations:1,passed:false});
+  expect(evaluationPolicy('direct','primary',records,[{id:'primary'}],1)).toEqual({delegations:1,passed:false});
+  expect(evaluationPolicy('direct',null,[],[],1)).toEqual({delegations:1,passed:false});
+  expect(evaluationPolicy('selective','primary',records,family,1)).toEqual({delegations:1,passed:true});
+  expect(evaluationPolicy('direct','primary',records,[{id:'primary'}],0)).toEqual({delegations:0,passed:true});
+  const child={sessionID:'child',taskID:'fix',tier:'fast',attempt:1,ref:'delegate',outcome:'succeeded',usage:zero};
+  const observed={...records[0],children:[child,child]};
+  expect(evaluationPolicy('direct','primary',[observed,observed],family,1)).toEqual({delegations:1,passed:false});
+  expect(evaluationPolicy('direct','primary',[observed],[],0)).toEqual({delegations:1,passed:false});
+  expect(evaluationPolicy('direct','primary',[{...observed,sessionID:'unrelated'}],[{id:'primary'}],0)).toEqual({delegations:0,passed:true});
 });
 
 test('native trajectory identity ignores non-JSON logs and empty failure IDs',()=>{

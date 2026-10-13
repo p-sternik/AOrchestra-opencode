@@ -4,10 +4,11 @@ export const phases = ['discover', 'plan', 'execute', 'verify', 'repair', 'compl
 export type Phase = typeof phases[number];
 export type Workflow = {
   phase: Phase; repairs: number;
+  repairRequired?: boolean;
   events: Array<{ phase: Phase; reason: string; at: number }>;
 };
 const allowed: Record<Phase, Phase[]> = {
-  discover: ['plan', 'blocked'], plan: ['execute', 'blocked'],
+  discover: ['plan', 'repair', 'blocked'], plan: ['execute', 'repair', 'blocked'],
   execute: ['verify', 'blocked'], verify: ['repair', 'complete', 'blocked'],
   repair: ['verify', 'blocked'], complete: ['blocked'], blocked: ['plan', 'execute', 'verify', 'repair'],
 };
@@ -28,6 +29,7 @@ export function transition(task: Task, phase: Phase, reason: string): void {
   state.events.push({ phase, reason, at: Date.now() });
 }
 export function beginExecution(task: Task): void {
+  if (workflow(task).repairRequired) throw new Error('BEGIN_REPAIR_BEFORE_RESTART');
   const phase = workflow(task).phase;
   if (phase === 'discover') transition(task, 'plan', 'Existing task contract defines the bounded plan');
   if (workflow(task).phase === 'repair') return;
@@ -36,7 +38,7 @@ export function beginExecution(task: Task): void {
 export function beginRepair(task: Task, reason: string, maxRepairs: number): void {
   if (!reason.trim()) throw new Error('REPAIR_DELTA_REQUIRED');
   const state = workflow(task);
-  if (!['verify', 'blocked'].includes(state.phase)) throw new Error('VERIFICATION_REQUIRED_BEFORE_REPAIR');
+  if (!['verify', 'blocked'].includes(state.phase) && !(state.repairRequired && ['discover','plan'].includes(state.phase))) throw new Error('VERIFICATION_REQUIRED_BEFORE_REPAIR');
   if (state.repairs >= maxRepairs) {
     transition(task, 'blocked', 'Repair budget exhausted');
     task.status = 'blocked';
@@ -44,6 +46,7 @@ export function beginRepair(task: Task, reason: string, maxRepairs: number): voi
   }
   transition(task, 'repair', reason);
   state.repairs++;
+  delete state.repairRequired;
   task.status = 'running';
   task.receipts = {};
 }

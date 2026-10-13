@@ -3,7 +3,7 @@ import { join, resolve } from 'node:path';
 import { spawn } from 'node:child_process';
 import { command, assertRuntime } from './runtime';
 import { readEvaluationUsage } from './eval-usage';
-import { comparison, evaluationMarkdown, type EvaluationResult, type Strategy } from '../lib/eval-report';
+import { comparison, evaluationMarkdown, evaluationPolicy, type EvaluationResult, type Strategy } from '../lib/eval-report';
 import { snapshot, changedPaths } from '../lib/files';
 type Case = { id: string; task: string; files: Record<string,string>; allowedChanges: string[]; assertions: string };
 const root = resolve(import.meta.dir, '..');
@@ -52,8 +52,9 @@ for (const strategy of selected === 'both' ? ['direct','selective'] : [selected]
   const scoped = changes.every(path=>c.allowedChanges.includes(path));
   const usage = measured?.usage;
   const runtimeOutcome = measured?.run?.runtimeOutcome ?? measured?.nativeOutcome ?? null;
-  const delegationCount = measured?.run?.children.length ?? delegations.length;
-  const policyPassed = strategy !== 'direct' || delegationCount === 0;
+  const policy = evaluationPolicy(strategy as Strategy, measured?.sessionID??null, measured?.records??[], measured?.family??[], delegations.length);
+  const delegationCount = policy.delegations;
+  const policyPassed = policy.passed;
   if (!policyPassed) error = error ?? 'DIRECT_DELEGATION_OBSERVED';
   results.push({id:c.id,strategy:strategy as Strategy,repeat:repeat+1,passed:!error&&runtimeOutcome!=='failed'&&runtimeOutcome!=='interrupted'&&runtimeOutcome!=='running'&&checks.passed&&scoped&&policyPassed,behaviorPassed:checks.passed,scopePassed:scoped,changedPaths:changes,delegations:delegationCount,durationMs,
     totalWorkflowCost:usage?.costUSD??null,totalWorkflowTokens:usage?.totalTokens??null,inputTokens:usage?.inputTokens??null,outputTokens:usage?.outputTokens??null,

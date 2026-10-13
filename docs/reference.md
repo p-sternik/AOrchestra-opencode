@@ -207,7 +207,11 @@ Acceptance reselects against current files so omitting `verify` cannot bypass
 required discovered checks. `resume` is read-only: it never spends a delegation,
 launches a child, reruns a command or duplicates phase events. `recover` remains
 an explicit action that interrupts stale children and preserves their files.
-Invalidation resets plan/baseline and dependent tasks, retaining repair counters.
+Invalidation resets plan/baseline and dependent tasks, retaining repair counters
+and any pending repair requirement. After a failed matching verifier, `recover`,
+`plan`, `start`, delegation and plugin restart cannot replace bounded repair.
+If invalidation removed the baseline, entering repair records a new one and
+consumes the same durable repair budget.
 
 Set `maxRepairs` in plugin options (positive integer, default **2**). When another
 repair would exceed it, the task returns `blocked`; start, invalidation and plugin
@@ -226,8 +230,11 @@ Project checks are selected deterministically:
    Use its supported `packageManager`, otherwise walk ancestors for a workspace
    declaration or nearest unambiguous lockfile.
    With no declaration/lockfile, use npm. Unknown/conflicting managers are gaps.
-3. Run the script in that package using native shell's `workdir` for nested
-   packages. Do not guess framework flags, test filenames, dependency graphs,
+3. Run the script in that package using native shell's `workdir`, including for
+   the project root. Shell predicates bind to their effective directory: omitted
+   `workdir` means the native session location, and an identical command in another
+   package cannot grant or revoke its receipt. Equivalent relative/absolute
+   directories deduplicate. Do not guess framework flags, test filenames, dependency graphs,
    watch-mode overrides or build requirements. Root-wide/cross-package checks
    and other languages belong in explicit rules or task predicates.
 
@@ -270,7 +277,7 @@ unchanged snapshot. After acceptance, a failed or unverifiable matching rerun
 blocks the completed task and all transitive dependents, clears their receipts and
 compatibility reviews, and interrupts active dependent children. Baselines, attempt
 history and consumed budgets survive. A later successful rerun alone cannot restore
-acceptance: explicitly restart or enter repair, obtain fresh checks, then accept
+acceptance: enter bounded repair, obtain fresh checks, then accept
 with a new compatibility review. Successful reruns do not refresh accepted receipts.
 Later edits invalidate receipts of unfinished tasks.
 
@@ -432,6 +439,9 @@ including native startup, and excludes reconciliation and independent assertions
 `report.md` presents the same strategy summary. DIRECT attempts that delegate are
 failed policy checks; SELECTIVE includes both native DIRECT and delegated work
 chosen under the normal routing policy.
+Delegation evidence includes native descendants, all matching primary telemetry
+records and CLI delegation events. Missing child telemetry cannot hide a known
+DIRECT policy violation; session IDs are deduplicated across observations.
 
 Usage reuses the regular report's workflow calculation: primary execution deltas
 plus each fresh child session once, including failed workers. Missing counters

@@ -45,6 +45,12 @@ test('manual predicates are retained and an identical discovered check does not 
     const t=task();t.verifiers=[{id:'test',tool:'shell',input:{command:'npm run test'},expect:{exitCode:0}}];
     const plan=await verificationPlan(f.root,t,['src/file.ts'],'snapshot');
     expect(plan.verifiers).toEqual([]);expect(plan.gaps).toEqual([]);
+    t.verifiers[0].input.workdir='.';
+    expect((await verificationPlan(f.root,t,['src/file.ts'],'snapshot')).verifiers).toEqual([]);
+    t.verifiers[0].input.workdir=join(f.root,'other');
+    const separate=await verificationPlan(f.root,t,['src/file.ts'],'snapshot');
+    expect(separate.verifiers).toHaveLength(1);
+    expect(separate.verifiers[0].input.workdir).toBe(f.root);
   }finally{await f.clean();}
 });
 

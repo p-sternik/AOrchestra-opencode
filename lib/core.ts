@@ -85,9 +85,22 @@ export function permissionRules(contract: Contract): Rule[] {
   return rules;
 }
 
-export function verifierPassed(verifier: Verifier, event: { tool: string; input: unknown; status: string; result?: unknown }): boolean {
-  if (event.status !== 'completed' || event.tool !== verifier.tool || !event.input || typeof event.input !== 'object') return false;
-  if (!Object.entries(verifier.input).every(([key, value]) => (event.input as Record<string, unknown>)[key] === value)) return false;
+export function verifierMatches(verifier: Verifier, event: { tool: string; input: unknown }, root?: string): boolean {
+  if (event.tool !== verifier.tool || !event.input || typeof event.input !== 'object') return false;
+  const input = event.input as Record<string, unknown>;
+  // Native shell defaults to the session location. An omitted workdir is not
+  // permission to validate an identical command in a different package.
+  if (verifier.tool === 'shell' && root) {
+    const workdir = input.workdir;
+    if (workdir !== undefined && typeof workdir !== 'string') return false;
+    if (resolve(root, verifier.input.workdir ?? '.') !== resolve(root, workdir ?? '.')) return false;
+  }
+  return Object.entries(verifier.input).every(([key, value]) =>
+    key === 'workdir' && verifier.tool === 'shell' && root ? true : input[key] === value);
+}
+
+export function verifierPassed(verifier: Verifier, event: { tool: string; input: unknown; status: string; result?: unknown }, root?: string): boolean {
+  if (event.status !== 'completed' || !verifierMatches(verifier, event, root)) return false;
   const result = event.result;
   if (!result || typeof result !== 'object') return false;
   const object = result as Record<string, unknown>;

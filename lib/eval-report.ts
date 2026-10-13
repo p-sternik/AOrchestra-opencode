@@ -31,6 +31,17 @@ export interface EvaluationResult {
 }
 
 export interface NativeSessionLink { id: string; parentID?: string }
+export function evaluationPolicy(strategy: Strategy, sessionID: string | null, records: Run[], family: NativeSessionLink[], trajectoryDelegations: number) {
+  const children = new Set(family.filter(s => s.id !== sessionID).map(s => s.id));
+  for (const run of records.filter(r => r.sessionID === sessionID)) {
+    for (const child of run.children) children.add(child.sessionID);
+  }
+  // Session IDs can be deduplicated across native storage and telemetry. CLI
+  // tool events without child IDs still prove delegation independently.
+  const delegations = Math.max(children.size, trajectoryDelegations);
+  return {delegations, passed:strategy !== 'direct' || delegations === 0};
+}
+
 export function reconcileEvaluation(sessionID: string, records: Run[], family: NativeSessionLink[]) {
   const unique = new Map<string, Run>();
   for (const run of records.filter(r => r.sessionID === sessionID)) {
