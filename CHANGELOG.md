@@ -3,6 +3,19 @@
 Release Please maintains future entries from Conventional Commits. Earlier local
 iterations are described below for context; they are not historical Git tags.
 
+## [0.8.0](https://github.com/p-sternik/AOrchestra-opencode/compare/0.7.0...0.8.0) (2026-10-13)
+
+
+### Features
+
+* add opt-in parallel analyses and harden verification ([#20](https://github.com/p-sternik/AOrchestra-opencode/issues/20)) ([4501653](https://github.com/p-sternik/AOrchestra-opencode/commit/45016539271315bc04176981281f78ebed8cc7ed))
+* **eval:** establish paired brownfield evaluation protocols ([9c8ec0a](https://github.com/p-sternik/AOrchestra-opencode/commit/9c8ec0a28d92241b57c4153e6503d0885870f730))
+
+
+### Bug Fixes
+
+* **ci:** exclude generated changelog from formatting checks ([0028d45](https://github.com/p-sternik/AOrchestra-opencode/commit/0028d45c611f5a1a592f11c68ca5982448e165b9))
+
 ## [0.7.0](https://github.com/p-sternik/AOrchestra-opencode/compare/0.6.1...0.7.0) (2026-10-13)
 
 ### Features
