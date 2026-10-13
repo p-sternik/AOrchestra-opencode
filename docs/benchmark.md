@@ -53,7 +53,13 @@ bun run eval:run -- --phase=smoke --strategy=both --case=legacy-zero-default --r
 ```
 
 A performance comparison requires a successful smoke for each protocol under the
-same resolved settings and harness source fingerprint. After separate authorization:
+same resolved settings and harness source fingerprint. This is an infrastructure
+readiness gate: at least one verified success per strategy is required, but case IDs,
+corpus hashes and development/holdout splits need not match the benchmark. Failed
+smoke attempts remain in the report and do not invalidate another passing attempt.
+Smoke does not certify the selected benchmark corpus, usage completeness or
+comparative effectiveness; inspect metric coverage separately before interpreting
+costs. After separate authorization:
 
 ```sh
 bun run eval:run -- --phase=benchmark --strategy=both --repeat=3 --split=development --smoke-report=work/eval-smoke/report.json --output-dir=work/eval-development
@@ -128,7 +134,13 @@ Verified success requires `executionConfirmed AND behaviorPassed AND
 regressionPassed AND scopePassed AND policyPassed` and no execution error.
 Original fixture `.test.js` sources run from runner-owned data through Node after
 inference, independently of edited or deleted workspace tests. Behavioral and
-regression results are recorded separately. Scope is measured after these checks. Usage completeness is reported separately.
+regression results are recorded separately. `changedPaths` and `scopePassed` use
+the snapshot captured before independent checks, so test artifacts cannot cause a
+scope violation and tests cannot hide an agent's forbidden edit by restoring it.
+`independentCheckChangedPaths` records the net workspace changes between that
+snapshot and the snapshot after both check groups. It is diagnostic and does not
+affect agent scope acceptance. Both snapshots use the existing exclusions; transient
+mutations reverted between snapshots are not measured. Usage completeness is reported separately.
 Native reconciliation and token category semantics remain documented in the
 [evaluation reference](reference.md#validation-and-evaluation). Unknown counters
 stay `null`; measured zero stays zero. Workflow usage includes primary deltas and

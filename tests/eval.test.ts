@@ -463,6 +463,47 @@ test('paired order alternates and performance smoke validation requires both pro
   expect(smokeCompatible(null, 'matched', 'source')).toBe(false);
 });
 
+test('smoke is a readiness gate across cases and splits, independent of usage coverage', async () => {
+  const { smokeCompatible } = await import('../scripts/eval-fixture');
+  const report = {
+    conditions: {
+      phase: 'smoke',
+      harnessSourceSHA256: 'source',
+      split: 'development',
+      corpusSHA256: 'smoke-corpus',
+    },
+    results: [
+      row({ id: 'smoke-direct', usageComplete: false, costComplete: false }),
+      row({ id: 'smoke-selective', strategy: 'selective', usageComplete: false }),
+      row({ id: 'failed-case', passed: false }),
+    ],
+  };
+  expect(smokeCompatible(report, 'matched', 'source')).toBe(true);
+  for (const gate of [
+    'passed',
+    'executionConfirmed',
+    'behaviorPassed',
+    'regressionPassed',
+    'scopePassed',
+    'policyPassed',
+  ] as const) {
+    expect(
+      smokeCompatible(
+        { ...report, results: [row({ [gate]: false }), row({ strategy: 'selective' })] },
+        'matched',
+        'source',
+      ),
+    ).toBe(false);
+  }
+  expect(
+    smokeCompatible(
+      { ...report, conditions: { ...report.conditions, phase: 'benchmark' } },
+      'matched',
+      'source',
+    ),
+  ).toBe(false);
+});
+
 test('native session preparation preserves shared permissions and fails closed on unenforced DIRECT denial', async () => {
   const { prepareEvaluationSession, evaluationPermissions } = await import('../scripts/eval-usage');
   const base = [

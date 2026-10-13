@@ -13,6 +13,7 @@ export interface EvaluationResult {
   policyPassed: boolean;
   scopePassed: boolean;
   changedPaths: string[];
+  independentCheckChangedPaths?: string[];
   delegations: number;
   durationMs: number;
   totalWorkflowCost: number | null;

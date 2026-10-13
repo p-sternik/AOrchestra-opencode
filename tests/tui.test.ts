@@ -28,6 +28,19 @@ test('sidebar keeps the running version until restart, and discards stale update
     ).toEqual({ version: '1.2.3', availableVersion: null, installedVersion: null });
 });
 
+test('sidebar shows updater failure while preserving availability and discards it after restart', () => {
+  const state = {
+    spec: 'aorchestra-opencode-v2@1.2.3',
+    availableVersion: '1.2.4',
+    updateError: 'failed',
+  };
+  expect(sidebarVersion(versionStatus('1.2.3', state))).toEqual({
+    title: 'AOrchestra v1.2.3',
+    update: 'Update failed · run setup manually',
+  });
+  expect(sidebarVersion(versionStatus('1.2.4', state)).update).toBeNull();
+});
+
 test('native sidebar slot renders server version and update states, then cancels requests on disposal', async () => {
   for (const installedVersion of [null, '1.2.4']) {
     let claim: any;

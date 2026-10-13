@@ -12,6 +12,8 @@ import { versionStatus, type VersionStatus } from './version-status';
 const interval = 24 * 60 * 60 * 1000;
 const key = 'updates/state';
 const stable = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
+const failureMessage =
+  'AOrchestra update check or installation could not finish. Run setup manually; if configuration changed, review its backup.';
 export type Installation = { config: Record<string, any>; spec: string };
 type UpdateState = {
   spec: string;
@@ -19,6 +21,7 @@ type UpdateState = {
   message?: string;
   availableVersion?: string;
   installedVersion?: string;
+  updateError?: string;
 };
 type Dependencies = {
   version: string;
@@ -62,34 +65,48 @@ export async function checkUpdate(deps: Dependencies): Promise<string | undefine
     deps.publish?.(state);
   };
   await save({ spec: installed.spec, checkedAt: now });
-  const latest = await deps.latest();
-  if (!stable.test(latest) || !Bun.semver.satisfies(latest, `>${deps.version}`)) return;
-  let message = `AOrchestra ${latest} is available. Run the latest CLI with setup to update.`;
-  let installedVersion: string | undefined;
-  await save({ spec: installed.spec, checkedAt: now, availableVersion: latest });
-  const managed = entry?.options?.updateManagedPackage === installed.spec;
-  if (
-    managed &&
-    deps.options.autoUpdate !== false &&
-    entry.options?.autoUpdate !== false &&
-    latest.split('.')[0] === deps.version.split('.')[0]
-  ) {
-    // Re-read after the network request: an edited pin or disabled updater wins.
-    const current = await deps.load();
-    if (!current || current.spec !== installed.spec) return;
-    assertManagedUpdate(current.config, installed.spec);
-    await deps.install(latest, installed.spec);
-    installedVersion = latest;
-    message = `AOrchestra updated from ${deps.version} to ${latest}. Restart OpenCode to load the updated plugin and agent instructions.`;
+  let latest: string | undefined;
+  try {
+    latest = await deps.latest();
+    if (!stable.test(latest) || !Bun.semver.satisfies(latest, `>${deps.version}`)) return;
+    let message = `AOrchestra ${latest} is available. Run the latest CLI with setup to update.`;
+    let installedVersion: string | undefined;
+    await save({ spec: installed.spec, checkedAt: now, availableVersion: latest });
+    const managed = entry?.options?.updateManagedPackage === installed.spec;
+    if (
+      managed &&
+      deps.options.autoUpdate !== false &&
+      entry.options?.autoUpdate !== false &&
+      latest.split('.')[0] === deps.version.split('.')[0]
+    ) {
+      // Re-read after the network request: an edited pin or disabled updater wins.
+      const current = await deps.load();
+      if (!current || current.spec !== installed.spec) return;
+      assertManagedUpdate(current.config, installed.spec);
+      await deps.install(latest, installed.spec);
+      installedVersion = latest;
+      message = `AOrchestra updated from ${deps.version} to ${latest}. Restart OpenCode to load the updated plugin and agent instructions.`;
+    }
+    await save({
+      spec: installed.spec,
+      checkedAt: now,
+      message,
+      availableVersion: latest,
+      ...(installedVersion ? { installedVersion } : {}),
+    });
+    return message;
+  } catch (error) {
+    await save({
+      spec: installed.spec,
+      checkedAt: now,
+      message: failureMessage,
+      updateError: failureMessage,
+      ...(latest && stable.test(latest) && Bun.semver.satisfies(latest, `>${deps.version}`)
+        ? { availableVersion: latest }
+        : {}),
+    });
+    throw error;
   }
-  await save({
-    spec: installed.spec,
-    checkedAt: now,
-    message,
-    availableVersion: latest,
-    ...(installedVersion ? { installedVersion } : {}),
-  });
-  return message;
 }
 
 export async function updateInstallation(
@@ -151,7 +168,7 @@ async function install(version: string, from: string, directory: string): Promis
     const worker = fileURLToPath(new URL('../scripts/update.ts', import.meta.url));
     const child = spawn('bun', [worker, version, from], {
       env,
-      stdio: 'ignore',
+      stdio: ['ignore', 'ignore', 'inherit'],
       windowsHide: true,
       detached: process.platform !== 'win32',
     });
@@ -207,41 +224,52 @@ export function startUpdateCheck(ctx: Plugin.Context): {
     return status;
   const paths = roots('opencode');
   const directory = resolve(process.env.OPENCODE_CONFIG_DIR ?? paths.config);
-  const timer = setTimeout(() => {
-    void Flock.withLock(
-      `aorchestra-update:${directory}`,
-      async () => {
-        if (controller.signal.aborted) return;
-        status.message = await checkUpdate({
-          version: pkg.version,
-          options,
-          load: () => updateInstallation(directory, ctx),
-          get: () => ctx.storage.get(key),
-          set: (state) => ctx.storage.set(key, state),
-          publish: (state) => {
-            status.info = versionStatus(pkg.version, state);
-          },
-          latest: async () => {
-            const response = await fetch(`https://registry.npmjs.org/${pkg.name}/latest`, {
-              signal: AbortSignal.any([controller.signal, AbortSignal.timeout(10_000)]),
-            });
-            if (!response.ok) throw new Error('AUTO_UPDATE_REGISTRY_UNAVAILABLE');
-            return ((await response.json()) as { version: string }).version;
-          },
-          install: (version, from) => install(version, from, directory),
-        });
-        if (status.message) console.error(status.message);
-      },
-      { dir: join(paths.state, 'locks'), timeoutMs: 1000, signal: controller.signal },
-    ).catch(() => {
+  let busy = false;
+  const run = async () => {
+    if (busy || controller.signal.aborted || status.info.installedVersion) return;
+    busy = true;
+    try {
+      await Flock.withLock(
+        `aorchestra-update:${directory}`,
+        async () => {
+          if (controller.signal.aborted) return;
+          status.message = await checkUpdate({
+            version: pkg.version,
+            options,
+            load: () => updateInstallation(directory, ctx),
+            get: () => ctx.storage.get(key),
+            set: (state) => ctx.storage.set(key, state),
+            publish: (state) => {
+              status.info = versionStatus(pkg.version, state);
+            },
+            latest: async () => {
+              const response = await fetch(`https://registry.npmjs.org/${pkg.name}/latest`, {
+                signal: AbortSignal.any([controller.signal, AbortSignal.timeout(10_000)]),
+              });
+              if (!response.ok) throw new Error('AUTO_UPDATE_REGISTRY_UNAVAILABLE');
+              return ((await response.json()) as { version: string }).version;
+            },
+            install: (version, from) => install(version, from, directory),
+          });
+          if (status.message) console.error(status.message);
+        },
+        { dir: join(paths.state, 'locks'), timeoutMs: 1000, signal: controller.signal },
+      );
+    } catch {
       if (controller.signal.aborted) return;
-      status.message =
-        'AOrchestra update check or installation could not finish. Run setup manually; if configuration changed, review its backup.';
+      status.message = failureMessage;
+      status.info = { ...status.info, updateError: failureMessage };
       console.error(status.message);
-    });
-  }, 0);
+    } finally {
+      busy = false;
+    }
+  };
+  const timer = setTimeout(run, 0);
+  const recurring = setInterval(run, interval);
+  recurring.unref();
   status.stop = () => {
     clearTimeout(timer);
+    clearInterval(recurring);
     controller.abort();
   };
   return status;

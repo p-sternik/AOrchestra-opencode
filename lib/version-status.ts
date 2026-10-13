@@ -4,10 +4,17 @@ export type VersionStatus = {
   version: string;
   availableVersion: string | null;
   installedVersion: string | null;
+  updateError?: string;
 };
 export function versionStatus(version: string, state?: unknown): VersionStatus {
   const value = state as
-    { spec?: string; availableVersion?: unknown; installedVersion?: unknown } | undefined;
+    | {
+        spec?: string;
+        availableVersion?: unknown;
+        installedVersion?: unknown;
+        updateError?: unknown;
+      }
+    | undefined;
   const newer = (candidate: unknown): candidate is string =>
     typeof candidate === 'string' &&
     /^\d+\.\d+\.\d+$/.test(candidate) &&
@@ -17,6 +24,9 @@ export function versionStatus(version: string, state?: unknown): VersionStatus {
     version,
     availableVersion: matches && newer(value?.availableVersion) ? value.availableVersion : null,
     installedVersion: matches && newer(value?.installedVersion) ? value.installedVersion : null,
+    ...(matches && typeof value?.updateError === 'string'
+      ? { updateError: value.updateError }
+      : {}),
   };
 }
 export function sidebarVersion(status: VersionStatus): { title: string; update: string | null } {
@@ -24,9 +34,11 @@ export function sidebarVersion(status: VersionStatus): { title: string; update: 
     title: `AOrchestra v${status.version}`,
     update: status.installedVersion
       ? `v${status.installedVersion} installed · restart required`
-      : status.availableVersion
-        ? `v${status.availableVersion} available`
-        : null,
+      : status.updateError
+        ? 'Update failed · run setup manually'
+        : status.availableVersion
+          ? `v${status.availableVersion} available`
+          : null,
   };
 }
 export const versionRpc = {
@@ -41,6 +53,7 @@ export const versionRpc = {
           version: { type: 'string' },
           availableVersion: { type: ['string', 'null'] },
           installedVersion: { type: ['string', 'null'] },
+          updateError: { type: 'string' },
         },
         required: ['version', 'availableVersion', 'installedVersion'],
       },

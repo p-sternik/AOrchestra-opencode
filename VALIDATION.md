@@ -633,3 +633,26 @@ not infer rejected requests without a child. Within-attempt external configurati
 changes and counterfactual delegation overhead remain limitations. Provider-backed
 smokes/repetitions, parallel-provider experiments and Windows integration were not
 run. See the [methodology](docs/benchmark.md) before interpreting comparisons.
+
+## Evaluation scope and recurring update checks
+
+Local Linux checks on 2026-10-13 with Bun 1.2.15: typecheck, **178 tests**,
+**13 repo-context helper tests**, formatting, evaluation corpus validation,
+version consistency and production package validation passed. The packaged TUI
+rendered in development and production modes. Final updater/TUI checks passed
+**19 tests**, including daily timer scheduling, overlapping callback rejection,
+disposal, persisted failures during throttled startup and error clearing after a
+successful check. The OpenCode 2.0.26 repository-profile native smoke passed with
+**zero model calls** and verifies the version RPC has no update error when the
+updater is disabled.
+
+Evaluation tests verify that independent checks cannot introduce an agent scope
+violation through generated files or hide a forbidden edit by restoring it.
+Their net workspace mutations are reported separately. Smoke readiness remains
+independent of corpus/split selection and usage completeness.
+
+Update scheduling uses controlled timer callbacks rather than a real 24-hour wait.
+Failures and recovery use controlled dependencies; a complete background upgrade
+between published npm releases and Windows timeout/TUI behavior remain untested.
+Native smoke disables the updater and does not verify actual installation.
+No paid/model-backed evaluation, publication or user configuration change ran.

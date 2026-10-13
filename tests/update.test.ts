@@ -1,5 +1,11 @@
-import { expect, test } from 'bun:test';
-import { checkUpdate, updateOptions, updateInstallation, type Installation } from '../lib/update';
+import { expect, test, spyOn } from 'bun:test';
+import {
+  checkUpdate,
+  startUpdateCheck,
+  updateOptions,
+  updateInstallation,
+  type Installation,
+} from '../lib/update';
 import { assertManagedUpdate, mergeSetup, readConfig } from '../lib/setup';
 import { Flock } from '@opencode/util/flock';
 import { mkdtemp, rm, writeFile, unlink } from 'node:fs/promises';
@@ -162,7 +168,7 @@ test('check attempts are throttled across restarts including offline and failed 
         throw new Error('failed setup');
       };
     if (mode === 'current') f.latest('1.2.3');
-    const first = await checkUpdate(f.deps).catch(() => undefined);
+    const first = await checkUpdate(f.deps).catch(() => f.state.message);
     expect(f.state.checkedAt).toBe(1000);
     expect((await checkUpdate(f.deps)) === first).toBe(true);
     const previous = f.requests;
@@ -277,8 +283,103 @@ test('failed installation leaves availability visible without claiming a complet
       },
     }),
   ).rejects.toThrow('setup failed');
-  expect(status).toEqual({ version: '1.2.3', availableVersion: '1.2.4', installedVersion: null });
+  expect(status).toEqual({
+    version: '1.2.3',
+    availableVersion: '1.2.4',
+    installedVersion: null,
+    updateError: expect.stringContaining('Run setup manually'),
+  });
   expect(f.state.installedVersion).toBeUndefined();
+  expect(await checkUpdate(f.deps)).toContain('Run setup manually');
+});
+
+test('offline errors survive throttled startup and clear after a successful daily check', async () => {
+  const f = fixture({ autoUpdate: false });
+  const latest = f.deps.latest;
+  f.deps.latest = async () => {
+    throw new Error('offline');
+  };
+  await expect(checkUpdate(f.deps)).rejects.toThrow('offline');
+  expect(f.state.updateError).toContain('Run setup manually');
+  expect(await checkUpdate(f.deps)).toBe(f.state.message);
+  f.deps.latest = latest;
+  f.advance();
+  expect(await checkUpdate(f.deps)).toContain('is available');
+  expect(f.state.updateError).toBeUndefined();
+});
+
+test('startup schedules daily checks and disposal stops both timers and late callbacks', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'aorchestra-update-schedule-'));
+  const names = [
+    'OPENCODE_CONFIG_DIR',
+    'OPENCODE_CONFIG',
+    'OPENCODE_CONFIG_CONTENT',
+    'AORCHESTRA_DISABLE_UPDATE',
+  ];
+  const prior = names.map((name) => process.env[name]);
+  const callbacks: Array<() => Promise<void>> = [];
+  const cleared: unknown[] = [];
+  let checks = 0;
+  const timeout = spyOn(globalThis, 'setTimeout');
+  const recurring = spyOn(globalThis, 'setInterval');
+  const clearTimeoutSpy = spyOn(globalThis, 'clearTimeout');
+  const clearIntervalSpy = spyOn(globalThis, 'clearInterval');
+  let status: ReturnType<typeof startUpdateCheck> | undefined;
+  try {
+    names.forEach((name) => delete process.env[name]);
+    process.env.OPENCODE_CONFIG_DIR = directory;
+    await writeFile(
+      join(directory, 'opencode.json'),
+      JSON.stringify({ plugins: [`${pkg.name}@${pkg.version}`] }),
+    );
+    // Restore real timers before running callbacks so native locking uses its own timers.
+    timeout.mockImplementation(((callback: () => Promise<void>) => {
+      callbacks.push(callback);
+      return 101;
+    }) as any);
+    recurring.mockImplementation(((callback: () => Promise<void>, delay: number) => {
+      expect(delay).toBe(86400000);
+      callbacks.push(callback);
+      return { unref() {} };
+    }) as any);
+    status = startUpdateCheck({
+      options: {},
+      plugin: {
+        list: async () => {
+          checks++;
+          return { data: [] };
+        },
+      },
+    } as unknown as Plugin.Context);
+    timeout.mockRestore();
+    recurring.mockRestore();
+    expect(callbacks).toHaveLength(2);
+    await callbacks[0]();
+    await callbacks[1]();
+    expect(checks).toBe(2);
+    await Promise.all([callbacks[1](), callbacks[1]()]);
+    expect(checks).toBe(3);
+    clearTimeoutSpy.mockImplementation(((timer: unknown) => {
+      cleared.push(timer);
+    }) as any);
+    clearIntervalSpy.mockImplementation(((timer: unknown) => {
+      cleared.push(timer);
+    }) as any);
+    status.stop();
+    expect(cleared).toHaveLength(2);
+    await callbacks[1]();
+    expect(checks).toBe(3);
+  } finally {
+    timeout.mockRestore();
+    recurring.mockRestore();
+    clearTimeoutSpy.mockRestore();
+    clearIntervalSpy.mockRestore();
+    names.forEach((name, i) => {
+      if (prior[i] === undefined) delete process.env[name];
+      else process.env[name] = prior[i];
+    });
+    await rm(directory, { recursive: true, force: true });
+  }
 });
 
 test('global JSONC discovery requires the matching active native package and rejects duplicate or local registrations', async () => {

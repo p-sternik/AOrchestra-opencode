@@ -5,8 +5,7 @@ import packageInfo from '../package.json';
 import {
   validateCorpus,
   writeFixture,
-  independentCheck,
-  regressionCheck,
+  checkFixture,
   evaluationOrder,
   smokeCompatible,
   type EvaluationCase as Case,
@@ -22,7 +21,7 @@ import {
   type EvaluationResult,
   type Strategy,
 } from '../lib/eval-report';
-import { snapshot, changedPaths, fingerprint } from '../lib/files';
+import { snapshot, fingerprint } from '../lib/files';
 const root = resolve(import.meta.dir, '..');
 const split = process.argv.find((arg) => arg.startsWith('--split='))?.slice(8) ?? 'development';
 if (!['development', 'holdout'].includes(split)) throw new Error('INVALID_SPLIT');
@@ -304,10 +303,8 @@ for (const c of cases)
         result.delegations = policy.delegations;
         result.policyPassed = policyPassed;
         if (!policyPassed) error ??= 'DIRECT_PROTOCOL_VIOLATION';
-        const checks = await independentCheck(cwd, c.assertions);
-        const regressions = await regressionCheck(cwd, c.files);
-        const changes = changedPaths(before, await snapshot(cwd));
-        const scoped = changes.every((path) => c.allowedChanges.includes(path));
+        const { checks, regressions, changes, scoped, independentCheckChangedPaths } =
+          await checkFixture(cwd, c, before);
         Object.assign(result, {
           ...evaluationOutcome(
             {
@@ -323,6 +320,7 @@ for (const c of cases)
           regressionPassed: regressions.passed,
           scopePassed: scoped,
           changedPaths: changes,
+          independentCheckChangedPaths,
           error,
           independentCheck: [checks.output, regressions.output].filter(Boolean).join('\n'),
         });

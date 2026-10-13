@@ -10,12 +10,55 @@ import {
   validateCorpus,
   writeFixture,
   independentCheck,
+  checkFixture,
 } from '../scripts/eval-fixture';
 import { snapshot, changedPaths } from '../lib/files';
 
 const development = developmentData as unknown as { version: number; cases: EvaluationCase[] };
 const holdout = holdoutData as unknown as { version: number; cases: EvaluationCase[] };
 const cases = [...development.cases, ...holdout.cases];
+
+for (const forbiddenEdit of [false, true]) {
+  test(`scope isolates agent edits from test mutations (forbidden edit: ${forbiddenEdit})`, async () => {
+    const cwd = await mkdtemp(join(tmpdir(), 'aorchestra-scope-'));
+    const fixture: EvaluationCase = {
+      id: 'test-mutations',
+      task: 'Update allowed.js',
+      files: {
+        'allowed.js': 'before',
+        'protected.js': 'original',
+        'regression.test.js':
+          "import { writeFileSync } from 'node:fs'; writeFileSync('regression-output.txt', 'generated');",
+      },
+      allowedChanges: ['allowed.js'],
+      assertions:
+        "const { writeFileSync } = await import('node:fs'); writeFileSync('protected.js', 'original'); writeFileSync('assertion-output.txt', 'generated');",
+    };
+    try {
+      await writeFixture(cwd, fixture.files);
+      const before = await snapshot(cwd);
+      await writeFixture(cwd, {
+        'allowed.js': 'after',
+        ...(forbiddenEdit ? { 'protected.js': 'agent edit' } : {}),
+      });
+      const checked = await checkFixture(cwd, fixture, before);
+      expect(checked.checks.passed).toBe(true);
+      expect(checked.regressions.passed).toBe(true);
+      expect(checked.changes).toEqual(
+        forbiddenEdit ? ['allowed.js', 'protected.js'] : ['allowed.js'],
+      );
+      expect(checked.scoped).toBe(!forbiddenEdit);
+      expect(checked.independentCheckChangedPaths).toEqual(
+        forbiddenEdit
+          ? ['assertion-output.txt', 'protected.js', 'regression-output.txt']
+          : ['assertion-output.txt', 'regression-output.txt'],
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+}
+
 test('development and holdout remain disjoint and fixture paths stay relative', () => {
   validateCorpus(development);
   validateCorpus(holdout);
