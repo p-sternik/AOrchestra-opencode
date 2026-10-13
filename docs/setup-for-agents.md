@@ -107,3 +107,13 @@ environment overrides. Never copy the template's entire config over the user's.
 Use the packaged global check to validate actual loading. The original 0.2.2
 release predates this installer/check mode; its template smoke check is not proof
 of global installation. Do not claim a check that was not observed.
+
+## Bundled improvement skill
+
+The package also registers `aorchestra-improve` with automatic invocation disabled.
+Setup upgrades exact ordered v0.5.0 default permissions to allow this ID for primary
+AOrchestra, alongside recognized legacy defaults. Customized ordered policies and
+project-local configuration remain intact. If a custom policy denies skills, add
+an exact allow rule for this ID only when the user wants to use it. No broad skill
+or shell permission is required. See the
+[improvement process](reference.md#reviewing-harness-improvements).

@@ -262,3 +262,58 @@ online documentation can differ from this tag. Re-run typecheck, tests and nativ
 smoke when changing runtime or API package versions. Runtime and pinned API
 versions may differ within the accepted range; native compatibility must still
 be observed for the installed runtime.
+
+## Evidence-based improvement skill and report coverage
+
+Local Linux checks on 2026-10-13, with Bun 1.2.15 and OpenCode 2.0.26:
+**101 harness/setup/release tests passed (536 assertions)**, plus **13 repo-context
+helper tests**. Typecheck, three-case evaluation corpus validation, version
+consistency, skill frontmatter validation, changed-document local link targets and
+diff checks passed. Package validation included all improvement skill references,
+production installation, plugin import and CLI help.
+
+The repository-profile native smoke check passed with **zero model calls**. It
+checks both bundled skills' paths against the loaded bundle and requires
+`autoinvoke: false`. Native permission requests with an explicit agent verify that
+the primary's shipped policy permits both exact skill IDs, denies unrelated skills,
+and retains executor denial. Setup tests cover exact ordered v0.5.0 default-policy
+migration, idempotency, comments and customized-policy preservation. The user's
+actual global configuration was not changed or tested by this work.
+
+New diagnostics regressions cover mixed measured-zero/unknown costs, failed-worker
+usage, worker ownership, provider versus verifier signals, interruptions and
+observation gaps, the three-run repeated-inspection threshold, secret omission
+from exports/rendering, and imported truncation surviving offline re-export.
+Coverage describes observed records and counters; it does not prove complete native
+event delivery or semantic correctness of untracked tasks.
+
+A primary-agent manual application of the skill reviewed empty, incomplete and
+synthetic repeated-inspection reports, keeping unsupported optimizations and cost
+claims inconclusive. This was an instruction review, not independent model-backed
+skill evaluation. No paid evaluation ran. Windows integration, successful real-model
+skill invocation and effectiveness/cost improvements remain unproven. Whole-workflow
+cost/token integration in the evaluation runner remains a separate change.
+
+## Packaged TUI JSX and version rendering
+
+On Linux on 2026-10-13, the production archive reproduced a missing
+`react/jsx-dev-runtime` import outside the checkout. Adding the local JSX source
+and production TUI dependencies fixed loading, but the isolated render still
+failed to show the server version: automatic JSX had evaluated signal values
+before the asynchronous status response. Reactive text/visibility getters in
+OpenTUI's native JSX runtime fixed that second regression.
+
+The enhanced package check passed with a fresh `--omit=dev` installation outside
+the repository, no tsconfig and no Solid JSX compiler preload. Both development
+and production modes rendered an intentionally different server version, the
+installed-update/restart message, and cancelled the pending request on disposal.
+Server import and CLI help also passed. This exercises the actual npm archive,
+not a source-checkout import that can borrow development dependencies.
+
+Typecheck, **101 harness tests (536 assertions)**, evaluation corpus validation,
+version consistency and diff checks passed. The repository-profile OpenCode
+2.0.26 native smoke passed with **zero model calls**. These checks use Bun 1.2.15;
+OpenTUI's package engine declaration requests newer Bun/Node versions, so these
+observations do not establish compatibility for every runtime. Windows package
+rendering remains a CI check, and an interactive OpenCode TUI session was not
+exercised locally. No release was published or immutable 0.5.0 tag changed.

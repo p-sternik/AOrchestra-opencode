@@ -2,7 +2,7 @@ import { Plugin, Model, Skill } from '@opencode/plugin';
 import { readFile, realpath } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { resolve } from 'node:path';
-import { BUNDLED_SKILL_ID, isAOrchestraAgent, escalationReasons, validateHandoff, Ledger, parseResult, permissionRules, ready, registerTask, reserve, taskById, validateTools, verifierPassed, type Contract, type Task, type Tier, type Handoff, type EscalationReason } from '../lib/core';
+import { BUNDLED_SKILLS, isAOrchestraAgent, escalationReasons, validateHandoff, Ledger, parseResult, permissionRules, ready, registerTask, reserve, taskById, validateTools, verifierPassed, type Contract, type Task, type Tier, type Handoff, type EscalationReason } from '../lib/core';
 import { canonicalTarget, changedPaths, fingerprint, snapshot } from '../lib/files';
 import { Telemetry, counters, metricsRpc } from '../lib/telemetry';
 import { beginExecution, beginRepair, transition, workflow } from '../lib/workflow';
@@ -39,11 +39,13 @@ export default Plugin.define({
   async setup(ctx) {
     const root = await realpath(ctx.location.directory);
     // Resolve the bundle relative to the installed plugin, independently of config paths.
-    const skillPath = fileURLToPath(new URL('../skills/repo-context/SKILL.md', import.meta.url));
-    const skillText = await readFile(skillPath, 'utf8');
-    const description = /^description: (.+)$/m.exec(skillText)?.[1];
-    const content = skillText.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n/, '');
-    await ctx.skill.transform(editor => editor.add({ id: BUNDLED_SKILL_ID, name: BUNDLED_SKILL_ID, path: skillPath, description: description ? JSON.parse(description) : undefined, content, autoinvoke: false } as Skill.Info));
+    for (const skill of BUNDLED_SKILLS) {
+      const skillPath = fileURLToPath(new URL(`../skills/${skill.directory}/SKILL.md`, import.meta.url));
+      const skillText = await readFile(skillPath, 'utf8');
+      const description = /^description: (.+)$/m.exec(skillText)?.[1];
+      const content = skillText.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n/, '');
+      await ctx.skill.transform(editor => editor.add({ id: skill.id, name: skill.id, path: skillPath, description: description ? JSON.parse(description) : undefined, content, autoinvoke: false } as Skill.Info));
+    }
     const options = ctx.options as Record<string, unknown>;
     updateOptions(options);
     let updates:ReturnType<typeof startUpdateCheck>={info:versionStatus(pkg.version),stop:()=>{}};
@@ -165,7 +167,7 @@ export default Plugin.define({
     });
     // Narrow native resource permissions as a second line of defense. No permission is elevated here.
     await ctx.permission.hook('evaluate', async event => {
-      if(!isAOrchestraAgent(event.agent)&&event.action==='skill'&&event.resources.includes(BUNDLED_SKILL_ID)) {
+      if(!isAOrchestraAgent(event.agent)&&event.action==='skill'&&BUNDLED_SKILLS.some(skill=>event.resources.includes(skill.id))) {
         event.effect='deny';event.message='AOrchestra skill is inactive for this agent';return;
       }
       if (event.agent === 'aorchestra' && event.action === 'edit') {

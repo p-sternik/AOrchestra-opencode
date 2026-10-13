@@ -5,6 +5,11 @@ import { isAbsolute, relative, resolve, sep, win32 } from 'node:path';
 
 export type Tier = 'fast' | 'balanced' | 'strong';
 export const BUNDLED_SKILL_ID = 'aorchestra-repo-context';
+export const IMPROVE_SKILL_ID = 'aorchestra-improve';
+export const BUNDLED_SKILLS = [
+  {id: BUNDLED_SKILL_ID, directory: 'repo-context'},
+  {id: IMPROVE_SKILL_ID, directory: 'improve'},
+] as const;
 export const isAOrchestraAgent = (agent:string|null|undefined) => agent==='aorchestra'||agent==='aorchestra-executor';
 export type Kind = 'analysis' | 'change' | 'verification';
 export type Verifier = { id: string; tool: string; input: Record<string, string>; expect: { exitCode?: number; contains?: string } };

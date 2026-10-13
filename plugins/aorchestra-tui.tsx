@@ -1,5 +1,7 @@
+/** @jsxImportSource @opentui/solid */
 import { Plugin } from '@opencode/plugin/tui';
 import { createEffect, createSignal, onCleanup } from 'solid-js';
+import { jsx } from '@opentui/solid/jsx-runtime';
 import { sidebarVersion, versionRpc, type VersionStatus } from '../lib/version-status';
 
 export default Plugin.define({
@@ -31,8 +33,9 @@ export default Plugin.define({
       const title=()=>{const current=status();return current?sidebarVersion(current).title:'AOrchestra';};
       const update=()=>{const current=status();return current?sidebarVersion(current).update:unavailable()?'Status unavailable':null;};
       return <box flexDirection="column" marginTop={1}>
-        <text fg={ctx.theme.text.muted}>{title()}</text>
-        <text fg={ctx.theme.text.muted} visible={update()!==null}>{update()??''}</text>
+        {/* Getter props remain reactive with Bun's automatic JSX runtime in npm packages. */}
+        {jsx('text',{fg:ctx.theme.text.muted,get children(){return title();}})}
+        {jsx('text',{fg:ctx.theme.text.muted,get visible(){return update()!==null;},get children(){return update()??'';}})}
       </box>;
     }});
   },

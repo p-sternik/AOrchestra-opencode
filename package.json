@@ -27,6 +27,7 @@
     "scripts/report.ts",
     "instructions",
     "skills/repo-context",
+    "skills/improve",
     "opencode.json",
     "README.md",
     "docs",
@@ -49,17 +50,17 @@
     "eval:run": "bun scripts/eval.ts run"
   },
   "devDependencies": {
-    "@opencode/theme": "2.0.26",
-    "@opentui/core": "0.5.17",
-    "@opentui/solid": "0.5.17",
     "@types/bun": "1.2.15",
-    "solid-js": "1.9.12",
     "typescript": "5.9.3"
   },
   "dependencies": {
     "@opencode/client": "2.0.26",
     "@opencode/plugin": "2.0.26",
+    "@opencode/theme": "2.0.26",
     "@opencode/util": "2.0.26",
-    "jsonc-parser": "3.3.1"
+    "@opentui/core": "0.5.17",
+    "@opentui/solid": "0.5.17",
+    "jsonc-parser": "3.3.1",
+    "solid-js": "1.9.12"
   }
 }

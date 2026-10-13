@@ -1,4 +1,7 @@
 import { expect,test } from 'bun:test';
+import { mkdtemp, readFile, writeFile, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join, resolve } from 'node:path';
 import { Telemetry,counters,delta,type Counters } from '../lib/telemetry';
 import {aggregate,markdown,workflowEstimate} from '../lib/report';
 const count=(cost=0,input=0):Counters=>({cost,input,output:0,reasoning:0,cacheRead:0,cacheWrite:0});
@@ -55,4 +58,72 @@ test('report keeps different harness versions in separate cohorts',async()=>{
 test('a new observed execution preserves a missing terminal as incomplete, without fabricated usage',async()=>{
   const f=fixture();await f.metrics.begin('primary',1,count(),'start-1');const resumed=new Telemetry(f.storage);await resumed.begin('primary',10,null,'start-2');
   const rows=(await resumed.page()).runs;expect(rows.length).toBe(2);const gap=rows.find(r=>r.observationIssue)!;expect(gap.endedAt).toBe(null);expect(gap.primaryUsage).toBe(null);expect(aggregate(rows).closedRuns).toBe(0);
+});
+
+test('mixed cost coverage counts zero, failed workers and unknown records separately',async()=>{
+  const f=fixture();
+  await f.metrics.begin('zero',1,count());await f.metrics.finish('zero','succeeded',count(),[],'end',2);
+  await f.metrics.begin('paid',3,count());await f.metrics.child('paid','worker','fix','fast',1,'ref');
+  await f.metrics.childFinished('worker',count(2),'failed');await f.metrics.finish('paid','failed',count(1),[],'end',4);
+  await f.metrics.begin('unknown',5,null);await f.metrics.finish('unknown','interrupted',count(),[],'end',6);
+  await f.metrics.begin('unfinished',7,count());
+  const report=aggregate((await f.metrics.page()).runs,{truncated:true});
+  expect(report.coverage).toEqual({terminalRuns:3,unfinishedRuns:1,interruptedRuns:1,knownCostRuns:2,unknownCostRuns:2});
+  expect(report.groups.find(g=>g.mode==='direct')!.observedEstimateUSD).toBe(0);
+  expect(report.groups.find(g=>g.mode==='delegated')!.observedEstimateUSD).toBe(3);
+  expect(report.groups.find(g=>g.mode==='direct')!.unknownCostRuns).toBe(1);
+  expect(markdown(report)).toContain('Collection is truncated');
+  expect(markdown(report)).toContain('Measured-record sum USD');
+});
+
+test('worker provider retries and verifier failures retain distinct owner signals',async()=>{
+  const f=fixture();await f.metrics.begin('owner',1,count());await f.metrics.begin('other',1,count());
+  await f.metrics.child('owner','worker','fix','fast',1,'ref');
+  await f.metrics.retry('worker','PROVIDER_RATE_LIMIT');await f.metrics.verifier('worker',false,'shell','check');
+  await f.metrics.finish('owner','failed',count(),[],'end',2);
+  const rows=(await f.metrics.page()).runs,owner=rows.find(r=>r.sessionID==='owner')!;
+  expect(owner.errors.map(e=>e.category)).toEqual(['provider','verification']);
+  expect(owner.providerRetries).toBe(1);expect(owner.verifierFailures).toBe(1);
+  expect(rows.find(r=>r.sessionID==='other')!.errors).toEqual([]);
+});
+
+test('repeated inspections need three runs and do not establish unnecessary work',async()=>{
+  const f=fixture();for(let n=0;n<3;n++) {
+    await f.metrics.begin('primary',n*10,count());await f.metrics.tool('primary','read',{file:'api.ts'},'completed','ref');
+    await f.metrics.child('primary',`worker-${n}`,'fix','fast',1,'ref');
+    await f.metrics.tool(`worker-${n}`,'read',{file:'api.ts'},'completed','ref');
+    await f.metrics.finish('primary','succeeded',count(),[],'end',n*10+1);
+    const report=aggregate((await f.metrics.page()).runs);
+    expect(report.hypotheses.length).toBe(n===2?1:0);
+    if(n===2)expect(report.hypotheses[0].proposal).toContain('Re-reading after a change may be necessary');
+  }
+});
+
+test('interruption and agent switch remain distinct from a missing terminal after restart',async()=>{
+  const f=fixture();await f.metrics.begin('interrupted',1,count());await f.metrics.finish('interrupted','interrupted',count(),[],'end',2);
+  await f.metrics.begin('switched',3,count());await f.metrics.detachPrimary('switched');
+  await f.metrics.begin('missing',4,count(),'start');await new Telemetry(f.storage).begin('missing',5,null,'next');
+  const report=aggregate((await f.metrics.page()).runs);
+  expect(report.closedRuns).toBe(1);expect(report.unfinishedRuns).toBe(3);
+  expect(report.runs.filter(r=>r.observationIssue).map(r=>r.observationIssue).sort()).toEqual(['agent-switched','terminal-not-observed']);
+  expect(report.groups[0].nativeSucceeded).toBe(0);expect(report.coverage.interruptedRuns).toBe(1);
+});
+
+test('offline report and re-export preserve imported truncation and omit raw secrets',async()=>{
+  const f=fixture();await f.metrics.begin('primary',1,count());
+  await f.metrics.tool('primary','read',{file:'sensitive-sentinel'},'error','ref','PERMISSION_DENIED sensitive-sentinel');
+  await f.metrics.finish('primary','failed',count(),[],'end',2);
+  const directory=await mkdtemp(join(tmpdir(),'aorchestra-report-'));
+  try {
+    const input=join(directory,'input.json'),output=join(directory,'report.md'),exported=join(directory,'export.json');
+    await writeFile(input,JSON.stringify({version:1,runs:(await f.metrics.page()).runs,truncated:true}));
+    for(let n=0;n<2;n++) {
+      const child=Bun.spawn([process.execPath,resolve(import.meta.dir,'../scripts/report.ts'),`--input=${n?exported:input}`,`--output=${output}`,`--export=${exported}`],{stdout:'pipe',stderr:'pipe'});
+      const [stdout,stderr,exit]=await Promise.all([new Response(child.stdout).text(),new Response(child.stderr).text(),child.exited]);
+      expect(stderr).toBe('');expect(exit).toBe(0);expect(JSON.parse(stdout).truncated).toBe(true);
+      const data=await readFile(exported,'utf8'),report=await readFile(output,'utf8');
+      expect(JSON.parse(data).version).toBe(1);expect(JSON.parse(data).truncated).toBe(true);
+      expect(report).toContain('coverage is partial');expect(data+report).not.toContain('sensitive-sentinel');
+    }
+  }finally{await rm(directory,{recursive:true,force:true});}
 });

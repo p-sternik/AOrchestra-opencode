@@ -82,8 +82,17 @@ unavailable RPC shows `Status unavailable` without substituting a local version.
 Update state is persisted as structured metadata alongside the existing check
 timestamp/message. An update is marked installed only after setup and its check
 succeed; a newly loaded version ignores status from the previous package spec.
-The sidebar makes no registry requests or model calls. Development render tests
-use Solid's browser condition and OpenTUI's native JSX preload through `bun run test`.
+The sidebar makes no registry requests or model calls. Its TSX file declares
+`@jsxImportSource @opentui/solid` locally, so an npm installation does not require
+the checkout's tsconfig. Solid, OpenTUI and the TUI theme are production dependencies.
+Text and visibility use reactive getter props in OpenTUI's JSX runtime, including
+when Bun loads the package without the Solid compiler transform.
+
+Development render tests use Solid's browser condition and OpenTUI's native JSX
+preload through `bun run test`. `npm run pack:check` additionally installs a fresh
+production consumer outside the checkout and renders the packaged sidebar without
+that preload or tsconfig, in both development and production JSX modes. It checks
+the server-reported version, installed-update text and request disposal.
 
 ## How it works
 
@@ -272,7 +281,7 @@ DIRECT work retains native behavior and has no new semantic acceptance claim.
 
 ## Repository context
 
-One portable [repo-context skill](../skills/repo-context/SKILL.md) is bundled and
+A portable [repo-context skill](../skills/repo-context/SKILL.md) is bundled and
 registered through the native skill transform. Invoke it explicitly with
 `@aorchestra-repo-context` or ask the agent to map/update repository documentation.
 
@@ -284,7 +293,8 @@ graph-ranking engine.
 
 Existing context can be read when relevant; missing documentation leads to normal
 code search. The skill has `autoinvoke: false` and the namespaced native ID
-`aorchestra-repo-context`. Main-agent permissions allow only the bundle by default.
+`aorchestra-repo-context`. Main-agent permissions allow the bundled repo-context and improvement skills by
+default.
 Global skill discovery remains enabled for other agents; existing explicit user
 exclusions are preserved. Repository AGENTS.md instructions still apply.
 
@@ -312,12 +322,49 @@ categories, verifier failures, repeated inspections, retries, time and available
 cost estimates. One record is a primary execution cycle, not necessarily a whole
 ticket. Runtime success is separate from verified task success; untracked DIRECT
 semantic correctness remains unknown. Missing usage is `null`, never invented zero.
-Costs are platform-counter estimates rather than provider invoices.
+Costs are platform-counter estimates rather than provider invoices. Reports show
+terminal, unfinished, interrupted and complete/unknown workflow-cost coverage.
+The measured-record sum includes only terminal records with known primary and all
+recorded child costs, including failed workers. It is not a total over unknown-cost
+records. Imported `truncated: true` stays partial through offline re-export.
+Any child session classifies a run as delegated, without measuring DIRECT work
+performed before delegation.
 
 Repeated signals can produce evidence-linked hypotheses after three runs. This is
 a review heuristic, not statistical significance or proof of strategy superiority.
 The harness does not modify its own prompts or routing policy. The intended loop is
 observation → hypothesis → matched-task replay → reviewed versioned change.
+
+## Reviewing harness improvements
+
+The bundled [improvement skill](../skills/improve/SKILL.md) has native ID
+`aorchestra-improve` and `autoinvoke: false`. It is invoked explicitly, like
+repo-context, and is not injected into ordinary coding sessions. Use a supplied
+report/export or request collection for an identified project/DB using the report
+commands above. Outside a checkout use `aorchestra report` with the same options.
+Neither collection nor rendering calls a model; interpreting evidence happens in
+the requesting primary session.
+
+Each of at most three proposals includes observation and native references,
+hypothesis and confidence, target files, smallest change, expected benefit,
+regression risk and validation method/success criteria. Empty or inadequate data
+must yield insufficient data, not generic optimization advice. Inspect the matching
+harness version and nearest tests before proposing a change. Full trajectories stay
+in native storage; do not copy sensitive content into proposals.
+
+The process is evidence → hypothesis → smallest candidate → matched evaluation →
+reviewed decision. A focused bug fix needs a regression. Behavior changes need
+matched baseline/candidate revisions, cases, model settings and budgets, independent
+behavior/regression/scope checks and explicit success criteria. Keep development
+cases separate from holdout cases; do not tune on holdout outcomes. Adopt only when
+criteria are met, reject demonstrated regressions or missing benefits, and mark
+missing measurements or inadequate comparisons inconclusive. No policy is adopted
+automatically. See the skill's [experiment guidance](../skills/improve/references/experiments.md).
+
+The existing three-case evaluation suite is smoke coverage. Its whole-workflow cost
+and token fields remain unknown, so this PR cannot establish cost savings. Paid
+`eval:run` remains opt-in. There is no new experiment registry, diagnostic service,
+agent, mandatory runtime phase or self-modification loop.
 
 ## Validation and evaluation
 

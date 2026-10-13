@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { command, binary, privateClient, removeTemporary, assertRuntime } from './runtime';
 import { metricsRpc, type Run } from '../lib/telemetry';
 import { Npm } from '@opencode/util/npm';
-import { BUNDLED_SKILL_ID } from '../lib/core';
+import { BUNDLED_SKILLS } from '../lib/core';
 import { versionRpc, type VersionStatus } from '../lib/version-status';
 import packageInfo from '../package.json';
 const root = resolve(import.meta.dir, '..');
@@ -65,15 +65,16 @@ try {
   const loadedVersion=loaded.source.type==='package'?loaded.source.version:packageInfo.version;
   const status=await client.rpc(versionRpc).get({},{location:{directory:project}}) as VersionStatus;
   if(status.version!==loadedVersion || status.availableVersion!==null || status.installedVersion!==null)throw new Error('NATIVE_VERSION_STATUS_MISMATCH');
-  const expectedSkill=resolve(bundleRoot,'skills/repo-context/SKILL.md');
+  const expectedSkills=BUNDLED_SKILLS.map(skill=>({...skill,path:resolve(bundleRoot,`skills/${skill.directory}/SKILL.md`)}));
   if(!agents.data.some(agent=>agent.id==='aorchestra')) throw new Error('RESOLVED_PRIMARY_MISSING');
   const session=await client.session.create({agent:'aorchestra-executor',location:{directory:project},permissions:[{action:'*',resource:'*',effect:'deny'},{action:'read',resource:'README.md',effect:'allow'}]});
   const persisted=await client.session.get({sessionID:session.id});
   // Exercise the shipped policy through native evaluation without dispatching tools
   // or depending on the user's customized global permission rules.
   const permissionSession=await client.session.create({agent:'aorchestra',location:{directory:project},permissions:source.agents.aorchestra.permissions});
-  const assertPermission=async(sessionID:string,resources:string[],expected:'allow'|'ask'|'deny')=>{
-    const decision=await client.permission.create({sessionID,action:'shell',resources});
+  const assertPermission=async(sessionID:string,resources:string[],expected:'allow'|'ask'|'deny',action='shell')=>{
+    const agent=action==='skill'?(await client.session.get({sessionID})).agent:undefined;
+    const decision=await client.permission.create({sessionID,action,resources,agent});
     if(decision.effect==='ask')await client.permission.reply({sessionID,requestID:decision.id,decision:'reject'});
     if(decision.effect!==expected)throw new Error(`NATIVE_PERMISSION_MISMATCH: ${JSON.stringify(resources)} expected ${expected}, got ${decision.effect}`);
   };
@@ -85,14 +86,19 @@ try {
     await assertPermission(permissionSession.id,['npm run test > output.txt'],'ask');
     await assertPermission(permissionSession.id,['git push origin main'],'deny');
     await assertPermission(session.id,['npm run test'],'deny');
+    for(const skill of BUNDLED_SKILLS) {
+      await assertPermission(permissionSession.id,[skill.id],'allow','skill');
+      await assertPermission(session.id,[skill.id],'deny','skill');
+    }
+    await assertPermission(permissionSession.id,['unrelated-skill'],'deny','skill');
   } finally {await client.session.remove({sessionID:permissionSession.id});}
   let skills=await client.skill.list({location:{directory:project}});
-  for(let attempt=0;attempt<10&&!skills.data.some(skill=>skill.id===BUNDLED_SKILL_ID&&skill.path===expectedSkill);attempt++) {
+  const registeredSkills=()=>expectedSkills.every(expected=>skills.data.some(skill=>skill.id===expected.id&&skill.path===expected.path&&skill.autoinvoke===false));
+  for(let attempt=0;attempt<10&&!registeredSkills();attempt++) {
     await new Promise(resolve=>setTimeout(resolve,250)); skills=await client.skill.list({location:{directory:project}});
   }
-  const bundledSkill=skills.data.find(skill=>skill.id===BUNDLED_SKILL_ID);
-  if(!bundledSkill || bundledSkill.autoinvoke!==false || bundledSkill.path!==expectedSkill) {
-    console.log(JSON.stringify({repoContext:skills.data.filter(skill=>skill.id===BUNDLED_SKILL_ID).map(skill=>({id:skill.id,path:skill.path,autoinvoke:skill.autoinvoke})),expected:expectedSkill}));
+  if(!registeredSkills()) {
+    console.log(JSON.stringify({skills:skills.data.filter(skill=>expectedSkills.some(expected=>expected.id===skill.id)),expected:expectedSkills}));
     throw new Error('BUNDLED_SKILL_NOT_REGISTERED_EXPLICITLY');
   }
   const rpc=client.rpc(metricsRpc);
