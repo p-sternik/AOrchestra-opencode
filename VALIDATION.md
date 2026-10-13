@@ -293,3 +293,27 @@ claims inconclusive. This was an instruction review, not independent model-backe
 skill evaluation. No paid evaluation ran. Windows integration, successful real-model
 skill invocation and effectiveness/cost improvements remain unproven. Whole-workflow
 cost/token integration in the evaluation runner remains a separate change.
+
+## Packaged TUI JSX and version rendering
+
+On Linux on 2026-10-13, the production archive reproduced a missing
+`react/jsx-dev-runtime` import outside the checkout. Adding the local JSX source
+and production TUI dependencies fixed loading, but the isolated render still
+failed to show the server version: automatic JSX had evaluated signal values
+before the asynchronous status response. Reactive text/visibility getters in
+OpenTUI's native JSX runtime fixed that second regression.
+
+The enhanced package check passed with a fresh `--omit=dev` installation outside
+the repository, no tsconfig and no Solid JSX compiler preload. Both development
+and production modes rendered an intentionally different server version, the
+installed-update/restart message, and cancelled the pending request on disposal.
+Server import and CLI help also passed. This exercises the actual npm archive,
+not a source-checkout import that can borrow development dependencies.
+
+Typecheck, **101 harness tests (536 assertions)**, evaluation corpus validation,
+version consistency and diff checks passed. The repository-profile OpenCode
+2.0.26 native smoke passed with **zero model calls**. These checks use Bun 1.2.15;
+OpenTUI's package engine declaration requests newer Bun/Node versions, so these
+observations do not establish compatibility for every runtime. Windows package
+rendering remains a CI check, and an interactive OpenCode TUI session was not
+exercised locally. No release was published or immutable 0.5.0 tag changed.

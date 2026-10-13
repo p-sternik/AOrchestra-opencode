@@ -60,7 +60,9 @@ iterations are recorded as context in its changelog, not invented historical tag
 ## Packaging and distribution
 
 `npm run pack:check` packs a real archive, installs it with production dependencies,
-imports the plugin and runs CLI help on Windows/Linux CI. The package ships its
+imports the server plugin, renders the packaged TUI sidebar and runs CLI help on
+Windows/Linux CI. The fresh consumer is outside the checkout, with production
+dependencies only and no project tsconfig or Solid JSX preload. The package ships its
 TypeScript entrypoint for the Bun-based OpenCode host, instructions and skill;
 the Node CLI shim invokes Bun. No install lifecycle scripts are required.
 

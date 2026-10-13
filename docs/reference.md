@@ -82,8 +82,17 @@ unavailable RPC shows `Status unavailable` without substituting a local version.
 Update state is persisted as structured metadata alongside the existing check
 timestamp/message. An update is marked installed only after setup and its check
 succeed; a newly loaded version ignores status from the previous package spec.
-The sidebar makes no registry requests or model calls. Development render tests
-use Solid's browser condition and OpenTUI's native JSX preload through `bun run test`.
+The sidebar makes no registry requests or model calls. Its TSX file declares
+`@jsxImportSource @opentui/solid` locally, so an npm installation does not require
+the checkout's tsconfig. Solid, OpenTUI and the TUI theme are production dependencies.
+Text and visibility use reactive getter props in OpenTUI's JSX runtime, including
+when Bun loads the package without the Solid compiler transform.
+
+Development render tests use Solid's browser condition and OpenTUI's native JSX
+preload through `bun run test`. `npm run pack:check` additionally installs a fresh
+production consumer outside the checkout and renders the packaged sidebar without
+that preload or tsconfig, in both development and production JSX modes. It checks
+the server-reported version, installed-update text and request disposal.
 
 ## How it works
 
