@@ -4,12 +4,14 @@ import { OpenCode } from '@opencode/client/promise';
 import { rm } from 'node:fs/promises';
 import { basename, dirname, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
-export async function removeTemporary(directory:string,prefix:string) {
-  const target=resolve(directory);
-  if(dirname(target)!==resolve(tmpdir())||!basename(target).startsWith(prefix))throw new Error('TEMP_CLEANUP_ESCAPE');
-  try {await rm(target,{recursive:true,force:true,maxRetries:5,retryDelay:100});}
-  catch(error) {
-    if(['EBUSY','EPERM'].includes((error as NodeJS.ErrnoException).code??'')) {
+export async function removeTemporary(directory: string, prefix: string) {
+  const target = resolve(directory);
+  if (dirname(target) !== resolve(tmpdir()) || !basename(target).startsWith(prefix))
+    throw new Error('TEMP_CLEANUP_ESCAPE');
+  try {
+    await rm(target, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+  } catch (error) {
+    if (['EBUSY', 'EPERM'].includes((error as NodeJS.ErrnoException).code ?? '')) {
       console.warn(`Temporary check directory is still locked and was retained: ${target}`);
     } else throw error;
   }
@@ -17,39 +19,117 @@ export async function removeTemporary(directory:string,prefix:string) {
 export const binary = process.env.OPENCODE_BIN || 'opencode2';
 export const OPENCODE_RUNTIME_RANGE = '>=2.0.26 <3.0.0';
 export function supportedRuntime(output: string): boolean {
-  const version = /^(?:opencode2?\s+)?v?(\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?)$/.exec(output.trim())?.[1];
+  const version =
+    /^(?:opencode2?\s+)?v?(\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?)$/.exec(
+      output.trim(),
+    )?.[1];
   return version !== undefined && Bun.semver.satisfies(version, OPENCODE_RUNTIME_RANGE);
 }
 export function assertRuntime(output: string): void {
-  if (!supportedRuntime(output)) throw new Error(`OpenCode ${OPENCODE_RUNTIME_RANGE} is required; got ${output.trim()}`);
+  if (!supportedRuntime(output))
+    throw new Error(`OpenCode ${OPENCODE_RUNTIME_RANGE} is required; got ${output.trim()}`);
 }
-export async function command(args: string[], cwd: string, timeoutMs = 120_000, env: NodeJS.ProcessEnv = process.env, onStdout?: (chunk: string) => void): Promise<string> {
+export async function command(
+  args: string[],
+  cwd: string,
+  timeoutMs = 120_000,
+  env: NodeJS.ProcessEnv = process.env,
+  onStdout?: (chunk: string) => void,
+): Promise<string> {
   return new Promise((resolve, reject) => {
-    const child = spawn(binary, args, { cwd, env, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
-    let stdout = '', stderr = '';
+    const child = spawn(binary, args, {
+      cwd,
+      env,
+      windowsHide: true,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    let stdout = '',
+      stderr = '';
     let expired = false;
-    const timer = setTimeout(() => { expired = true; child.kill(); }, timeoutMs);
-    child.stdout.on('data', data => { const chunk = data.toString(); stdout += chunk; onStdout?.(chunk); });
-    child.stderr.on('data', data => { stderr += data; });
-    child.on('error', error => { clearTimeout(timer); reject(error); });
-    child.on('close', code => { clearTimeout(timer); if (expired) reject(new Error('CLI_TIMEOUT')); else if (code !== 0) reject(new Error(`CLI_EXIT_${code}: ${stderr.slice(-3000)}`)); else resolve(stdout); });
+    const timer = setTimeout(() => {
+      expired = true;
+      child.kill();
+    }, timeoutMs);
+    child.stdout.on('data', (data) => {
+      const chunk = data.toString();
+      stdout += chunk;
+      onStdout?.(chunk);
+    });
+    child.stderr.on('data', (data) => {
+      stderr += data;
+    });
+    child.on('error', (error) => {
+      clearTimeout(timer);
+      reject(error);
+    });
+    child.on('close', (code) => {
+      clearTimeout(timer);
+      if (expired) reject(new Error('CLI_TIMEOUT'));
+      else if (code !== 0) reject(new Error(`CLI_EXIT_${code}: ${stderr.slice(-3000)}`));
+      else resolve(stdout);
+    });
   });
 }
 
 // A short-lived private server shares the native DB unless the caller supplies a test DB.
 // It does not start models, change the managed service, or reveal its password.
-export async function privateClient(cwd:string,env:NodeJS.ProcessEnv=process.env) {
-  let password=randomBytes(24).toString('hex');
-  const server=spawn(binary,['serve','--hostname','127.0.0.1','--port','0'],{cwd,env:{...env,OPENCODE_SERVER_PASSWORD:password},windowsHide:true,stdio:['ignore','pipe','pipe']});
-  const close=async()=>{
-    if(process.platform==='win32'&&server.pid)await new Promise<void>(resolve=>{const stop=spawn('taskkill',['/PID',String(server.pid),'/T','/F'],{windowsHide:true,stdio:'ignore'});stop.on('close',()=>resolve());stop.on('error',()=>resolve());});else server.kill();
+export async function privateClient(cwd: string, env: NodeJS.ProcessEnv = process.env) {
+  let password = randomBytes(24).toString('hex');
+  const server = spawn(binary, ['serve', '--hostname', '127.0.0.1', '--port', '0'], {
+    cwd,
+    env: { ...env, OPENCODE_SERVER_PASSWORD: password },
+    windowsHide: true,
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  const close = async () => {
+    if (process.platform === 'win32' && server.pid)
+      await new Promise<void>((resolve) => {
+        const stop = spawn('taskkill', ['/PID', String(server.pid), '/T', '/F'], {
+          windowsHide: true,
+          stdio: 'ignore',
+        });
+        stop.on('close', () => resolve());
+        stop.on('error', () => resolve());
+      });
+    else server.kill();
   };
   try {
-    const baseUrl=await new Promise<string>((resolve,reject)=>{
-      let logs='';const timer=setTimeout(()=>reject(new Error('SERVER_START_TIMEOUT')),60_000);
-      const receive=(data:Buffer)=>{logs+=data.toString();const p=/server password ([^\r\n]+)/.exec(logs);if(p)password=p[1].trim();const url=/http:\/\/127\.0\.0\.1:\d+/.exec(logs);if(url){clearTimeout(timer);resolve(url[0]);}if(logs.length>20000)logs=logs.slice(-10000);};
-      server.stdout.on('data',receive);server.stderr.on('data',receive);server.on('error',error=>{clearTimeout(timer);reject(error);});server.on('exit',code=>{clearTimeout(timer);reject(new Error(`SERVER_EXIT_${code}`));});
+    const baseUrl = await new Promise<string>((resolve, reject) => {
+      let logs = '';
+      const timer = setTimeout(() => reject(new Error('SERVER_START_TIMEOUT')), 60_000);
+      const receive = (data: Buffer) => {
+        logs += data.toString();
+        const p = /server password ([^\r\n]+)/.exec(logs);
+        if (p) password = p[1].trim();
+        const url = /http:\/\/127\.0\.0\.1:\d+/.exec(logs);
+        if (url) {
+          clearTimeout(timer);
+          resolve(url[0]);
+        }
+        if (logs.length > 20000) logs = logs.slice(-10000);
+      };
+      server.stdout.on('data', receive);
+      server.stderr.on('data', receive);
+      server.on('error', (error) => {
+        clearTimeout(timer);
+        reject(error);
+      });
+      server.on('exit', (code) => {
+        clearTimeout(timer);
+        reject(new Error(`SERVER_EXIT_${code}`));
+      });
     });
-    return {client:OpenCode.make({baseUrl,headers:{authorization:`Basic ${Buffer.from(`opencode:${password}`).toString('base64')}`}}),close};
-  }catch(error){await close();throw error;}
+    return {
+      client: OpenCode.make({
+        baseUrl,
+        headers: {
+          authorization: `Basic ${Buffer.from(`opencode:${password}`).toString('base64')}`,
+        },
+      }),
+      close,
+    };
+  } catch (error) {
+    await close();
+    throw error;
+  }
 }

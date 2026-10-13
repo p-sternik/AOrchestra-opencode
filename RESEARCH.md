@@ -3,13 +3,13 @@
 Source review dated 2026-10-11. This is a review of specific implementations, not
 a ranking of every harness in 2026 or a measured performance comparison.
 
-| Project | Reviewed revision | Scope |
-| --- | --- | --- |
-| FoundationAgents/AOrchestra | 14a1a2051d6b03c479b706f8f555a60b8419e3b5 | Orchestrator, delegation, SWE-bench executor, runner and prompts |
-| SWE-agent/mini-swe-agent | 04d809ceab9df28f9adaed044884180159172930 | Agent loop and configuration |
-| SWE-agent/SWE-agent | 3ea751c087f32b16e039a2233dd6eefecef325d5 | Agent and default configuration |
-| OpenHands/software-agent-sdk | 4cc058275c5a08d845bd846576aafc80e5dd7d0d | Persistent state and confirmation policy |
-| OpenCode | 9b4ec5714d481559990db0a816d5dec19541a814 (v2.0.26) | Plugin loading, native sessions and API types |
+| Project                      | Reviewed revision                                  | Scope                                                            |
+| ---------------------------- | -------------------------------------------------- | ---------------------------------------------------------------- |
+| FoundationAgents/AOrchestra  | 14a1a2051d6b03c479b706f8f555a60b8419e3b5           | Orchestrator, delegation, SWE-bench executor, runner and prompts |
+| SWE-agent/mini-swe-agent     | 04d809ceab9df28f9adaed044884180159172930           | Agent loop and configuration                                     |
+| SWE-agent/SWE-agent          | 3ea751c087f32b16e039a2233dd6eefecef325d5           | Agent and default configuration                                  |
+| OpenHands/software-agent-sdk | 4cc058275c5a08d845bd846576aafc80e5dd7d0d           | Persistent state and confirmation policy                         |
+| OpenCode                     | 9b4ec5714d481559990db0a816d5dec19541a814 (v2.0.26) | Plugin loading, native sessions and API types                    |
 
 ## AOrchestra
 
@@ -83,3 +83,22 @@ creates releases when those PRs merge. GITHUB_TOKEN-created PRs do not trigger
 ordinary PR workflows, so our release workflow explicitly validates the generated
 branch through the reusable validation workflow.
 [Official action documentation](https://github.com/googleapis/release-please-action).
+
+## Concurrent independent analyses
+
+Read-only analysis contracts can share a source baseline because they have no
+permitted writes. The v1 ledger therefore admits compatible analyses, bounded by
+one running task per primary by default. Higher concurrency is explicitly enabled
+after target-provider integration validation, while preserving exclusive change
+and verification work through acceptance. Review keeps edit exclusion without
+occupying a running slot. Dependencies and bounded contracts express independence;
+semantic independence is not automatically inferred.
+
+Group admission uses one ledger mutation and source snapshot, then reuses native
+child lifecycle calls concurrently. No queue, parallel writer runtime or ledger
+migration is introduced. Evidence, epochs, repairs and acceptance remain per task;
+a sibling failure cannot revoke unrelated work. Owner recovery remains owner-wide.
+Native permissions and snapshots are enforcement and freshness checks, not
+filesystem isolation or cross-session workspace locks. Deterministic overlap and
+no-inference native integration do not establish semantic effectiveness or cost
+savings; see [validation limits](VALIDATION.md).

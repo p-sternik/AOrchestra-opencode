@@ -6,6 +6,15 @@ in the [technical reference](docs/reference.md#validation-and-evaluation). Nativ
 smoke checks accept stable OpenCode >=2.0.26 <3.0.0 (tested runtimes: 2.0.26 and 2.0.27);
 model evaluation is opt-in and can incur provider costs.
 
+Run `npm run format` before submitting changes and `npm run format:check` to check
+formatting without writing files. Prettier is pinned in development dependencies;
+CI checks formatting on Windows and Linux. Dependencies, generated output and
+local credentials are excluded through `.prettierignore` and `.gitignore`.
+Keep formatting-only changes in a separate commit from behavior changes when
+possible. Formatting supplements typecheck and behavioral tests.
+Markdown keeps double-quoted front matter because the bundled skill loader reads
+description values as JSON strings.
+
 ## Commit messages
 
 Use English Conventional Commits and retain the prefix in squash-merge titles:
@@ -98,8 +107,10 @@ npm publish --access public
 
 No npm token is stored in this repository or release workflow. Automatic npm
 publication uses the publish-npm job in release.yml and requires the package owner's
-Trusted Publisher configuration plus NPM_PUBLISH_ENABLED=true. Follow the
-[publishing guide](docs/npm-publishing.md). Check `npm view aorchestra-opencode-v2 version`
+Trusted Publisher configuration plus NPM_PUBLISH_ENABLED=true. In the package's
+npm settings, configure `p-sternik/AOrchestra-opencode`, workflow `release.yml`,
+without a GitHub environment, and enable direct publishing. Check
+`npm view aorchestra-opencode-v2 version`
 for the latest published version; describe a new version as published only after
 confirming its registry upload. Retries verify registry archive integrity
 against the exact release tag before skipping an existing version.
