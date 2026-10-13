@@ -3,6 +3,13 @@
 Release Please maintains future entries from Conventional Commits. Earlier local
 iterations are described below for context; they are not historical Git tags.
 
+## [0.8.1](https://github.com/p-sternik/AOrchestra-opencode/compare/0.8.0...0.8.1) (2026-10-13)
+
+
+### Bug Fixes
+
+* isolate evaluation scope and surface recurring update failures ([#22](https://github.com/p-sternik/AOrchestra-opencode/issues/22)) ([f2a0c41](https://github.com/p-sternik/AOrchestra-opencode/commit/f2a0c41d54fccdeab15b0c0df1143ace6297a6c5))
+
 ## [0.8.0](https://github.com/p-sternik/AOrchestra-opencode/compare/0.7.0...0.8.0) (2026-10-13)
 
 
