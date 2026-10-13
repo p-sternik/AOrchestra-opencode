@@ -1,6 +1,6 @@
 # AOrchestra for OpenCode V2
 
-[![Validate](https://github.com/p-sternik/AOrchestra-opencode/actions/workflows/validate.yml/badge.svg)](https://github.com/p-sternik/AOrchestra-opencode/actions/workflows/validate.yml)
+[![CI / Release](https://github.com/p-sternik/AOrchestra-opencode/actions/workflows/release.yml/badge.svg?branch=main)](https://github.com/p-sternik/AOrchestra-opencode/actions/workflows/release.yml)
 [![npm](https://img.shields.io/npm/v/aorchestra-opencode-v2)](https://www.npmjs.com/package/aorchestra-opencode-v2)
 [![Release](https://img.shields.io/github/v/release/p-sternik/AOrchestra-opencode)](https://github.com/p-sternik/AOrchestra-opencode/releases)
 [![Tested OpenCode](https://img.shields.io/badge/tested_OpenCode-2.0.26%20%26%202.0.27-blue)](VALIDATION.md)

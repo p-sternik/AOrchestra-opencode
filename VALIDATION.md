@@ -348,3 +348,33 @@ fresh databases, native successful worker-family collection and Windows native
 integration remain untested. No paid evaluation was run. The controlled failure
 and deterministic counters establish collection mechanics, not measured model
 costs, semantic effectiveness or strategy superiority.
+
+## Automated CI and release routing
+
+Local Linux checks on 2026-10-13, based on main v0.6.0: **106 harness tests
+passed (589 assertions)**, **13 repo-context helper tests**, typecheck, corpus
+validation, version consistency and production package installation/import/CLI/TUI
+render checks passed. OpenCode 2.0.26 repository-profile smoke passed with
+**zero model calls**. Actionlint 1.7.12 accepted both workflows.
+
+New tests parse the actual workflow YAML and use GitHub's expression evaluator to
+check normal publication, empty manual inputs, tag-only retries with skipped
+release dependencies, disabled publication, failed/cancelled release jobs,
+non-main dispatches, immutable checkout selection and PR concurrency isolation.
+The generated release PR still has explicit SHA validation and a successful
+validation dependency before merging. Existing recording-CLI merge/race/dispatch
+checks and real-archive registry integrity tests continue to pass.
+
+Release Please 17.6.0, installed in a temporary external fixture, generated
+`chore(main): release 0.6.1 [skip ci]` from the repository configuration and parsed
+its version and branch correctly. The pinned v5 action declares this Release Please
+version range. The marker suppresses ordinary push/PR event workflows; explicit
+workflow calls and the post-merge dispatch remain responsible for release checks.
+Standalone Validate no longer duplicates Release's main-push matrix.
+
+These checks do not execute GitHub's scheduler, prove approval suppression on a
+live generated PR, or exercise a new OIDC publication. The next actual release
+must confirm those integrations. No release was published, tag changed or
+repository protection setting modified during local verification. Branch rules
+requiring skipped standalone PR checks remain incompatible with the generated
+marker; the automation preserves GitHub's enforcement of those rules.
