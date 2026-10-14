@@ -282,3 +282,167 @@ inference. Neither may be presented as provider-backed end-to-end delegation.
 8. **Which adaptations are justified?** Native sessions/model dispatch/permissions/storage avoid duplicating OpenCode's runtime. DIRECT keeps cohesive edit/test reasoning with the shell-capable primary. Exact scopes, observed acceptance and removing the extra summary call simplify execution and strengthen tested controls. No savings claim follows without measurements.
 9. **Which foundational issues remain?** Semantic task decomposition, mutually consistent free-text contracts, source factual provenance, actual provider/tool request composition, project-instruction conflicts, context-window limits and transport cancellation reliability remain unproven. Shared workspace and external writers are not isolated; unrestricted trusted primary shell scripts can mutate it. Timeout bounds native wait but relies on cancellation support in other API calls. Default operation counts are unlimited; only configured budgets bound retries. These are explicit limits, not claims of verified safety.
 10. **Reliable enough for further optimization?** Reliable enough to begin explicitly authorized native task validation. Not enough evidence to justify routing/model/cost optimization or architectural expansion. First observe representative DIRECT and DELEGATE successes/failures on identical revisions, models and independent acceptance checks; retain these fixes and the simple native harness.
+
+## Minimal architecture review, 2026-10-14
+
+Baseline: `c122345b375c8dd40b6976cdfc3373a55384adf6`; the starting working tree
+was clean. This review changes presentation and removes demonstrated duplication.
+It does not establish routing effectiveness, remove acceptance controls or change
+production routing, budgets, permissions, model providers or storage contracts.
+
+The [AOrchestra paper, section 3](https://arxiv.org/html/2602.03786v2#S3)
+requires dynamic I/C/T/M composition and observation-driven continuation. Its
+specific system delegates all environment execution; the generic formulation also
+permits direct actions. The [reference delegation implementation](https://github.com/FoundationAgents/AOrchestra/blob/14a1a2051d6b03c479b706f8f555a60b8419e3b5/aorchestra/tools/delegate.py)
+is a benchmark adaptation, not a required runtime for OpenCode. The
+[coupled-evolution paper](https://arxiv.org/html/2610.17740v1#S1) separates missing
+capabilities from failures to use available ones. Applied here, structural
+capability checks must precede any diagnosis that SELECTIVE underuses delegation.
+The equation-discovery results do not establish coding-harness performance.
+
+### Five responsibilities and minimum state
+
+| Responsibility       | Existing implementation / native reuse                                                              | Minimum harness state and invariants                                                                                                                                                                                                             |
+| -------------------- | --------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Interpret/decompose  | Primary instructions; native primary model, context and tools; `registerTask` in `lib/core.ts`      | Bounded objective, task identity, dependencies, exact write scope, preservation constraints and verifiers. Decomposition remains a model decision; dependencies must be accepted. No separate planner.                                           |
+| Select M/T/I/C       | Delegate schema and admission in `plugins/aorchestra.ts`; native model/tool catalogs and model refs | Registered I/C/handoff; explicit model tier and native leaf tools; retry reason/delta when applicable. Preserve availability/variant/tool-support checks, source status/revision, prompt bounds and deny-first permission rules.                 |
+| Dispatch             | `ctx.session.create/prompt/wait/interrupt`; native executor and permissions                         | Owner/task/attempt-to-child identity, active contract and cancellation/timeout state. Native session owns execution, messages, provider retry and lifecycle outcome; harness state owns task authority and late-result revocation.               |
+| Consume observations | Native child messages/outcome; `parseResult`; native tool result resumes parent                     | Structured observation plus attempt outcome; COMPLETE is not acceptance. Failed/unknown native outcome, cancelled attempt or revoked dependency cannot enter successful review. No second summarizing model or copied conversation history.      |
+| Verify/continue      | Native tool hooks; `verificationPlan`; receipts/snapshots/epochs; explicit accept/repair/recover    | Baseline/scope, current predicates, fresh before/after receipts, epoch, repair requirement, compatibility review and configured counters. Native success does not imply semantic correctness. Restart and late callbacks cannot invent evidence. |
+
+The minimum executable delegated flow is: choose a bounded slice → register its
+I/C, provenance, scope and verifiers once → delegate with M/T → consume the native
+child observation → run pending native checks → review compatibility and accept,
+or repair with new evidence and continue. An accepted observation may support the
+next slice. Untracked localized DIRECT work uses ordinary native checks and has
+no additional harness acceptance claim.
+
+Native OpenCode already provides sessions, conversations, model dispatch, tool
+execution, permissions, storage, compaction and provider retry. Keep reusing these.
+The task ledger is not another conversation store: it records acceptance authority,
+source freshness, dependencies and evidence that native session success does not
+supply. Permissions plus snapshots are not process isolation or workspace locks.
+
+### Coordination and mechanism decisions
+
+| Suspected overhead                                                                                      | Classification                                          | Decision / replacement and retained invariant                                                                                                                                                                                                                  |
+| ------------------------------------------------------------------------------------------------------- | ------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Report format in primary instructions, executor instructions, delegate description and generated prompt | REDUNDANT                                               | REMOVE repeated copies; retain the complete format in the generated task prompt and `parseResult` validation. Executor follows that prompt; primary consumes the structured result.                                                                            |
+| Long tool descriptions restating instructions, schema types and report fields                           | SIMPLIFIABLE                                            | SIMPLIFY descriptions; preserve structured array/object field descriptions and a valid call example, particularly after the historical malformed-argument failure. No schema or gate changes.                                                                  |
+| Instruction, context, scope, handoff and verifiers repeated at dispatch                                 | ESSENTIAL once; REDUNDANT if resupplied                 | KEEP existing taskId lookup. Registered context is already reused; optional handoff only replaces evidence. Empty context is legitimate when handoff supplies all relevant C. No additional reuse layer needed.                                                |
+| Registration → plan → start → delegation                                                                | SIMPLIFIABLE guidance                                   | Register and delegate are sufficient before child execution: two model-facing calls. Registration selects checks and delegation starts execution. Plan only refreshes a stale plan; start is for tracked DIRECT. Retain scope/provenance and admission checks. |
+| Four required delegate fields (`taskId`, `model`, `tools`, `routingEvidence`)                           | ESSENTIAL for current contract                          | KEEP. TaskId resolves I/C; M/T remain dynamic; reason records selection/escalation evidence. Moving M/T into registration does not reduce total information; fusing register/dispatch has no measured benefit yet.                                             |
+| Group prompt fingerprint recomputed for identical admitted source state; unused returned handoff        | REDUNDANT                                               | REMOVE repeated fingerprint derivation and unused intermediate property. Derive one fingerprint from the same atomic group snapshot; still deliver each task's own handoff.                                                                                    |
+| JSON schema and runtime argument checks                                                                 | ESSENTIAL                                               | KEEP both: native codec conversion has been observed to pass raw inputs through. Removing explicit validation would weaken fail-closed admission.                                                                                                              |
+| Native permissions plus active-contract hooks/path checks                                               | ESSENTIAL                                               | KEEP: effective tool filtering, exact paths, sensitive grep results and revocation cover boundaries beyond native tool availability alone.                                                                                                                     |
+| Native outcome plus structured report plus independent acceptance                                       | ESSENTIAL                                               | KEEP all three; they answer different questions. A fluent COMPLETE report cannot prove native success or current-source correctness.                                                                                                                           |
+| Status plus workflow phase/events                                                                       | UNVERIFIED redundancy                                   | KEEP current representation. Repair requirements, review ownership and acceptance revocation use it; no equivalent native task-acceptance state was found. Event-history removal would need a focused migration/use audit.                                     |
+| Snapshot scans and project-check rediscovery                                                            | UNVERIFIED benefit/cost                                 | KEEP freshness checks; `snapshotDiagnostics` already measures scan work. No representative large-repository timing justifies weakening coverage or adding incremental state.                                                                                   |
+| Recovery, epochs, retry delta and configured limits                                                     | ESSENTIAL                                               | KEEP: stale callbacks, abandoned children and fresh evidence after repair have regressions. Native transport retry is distinct from changing a failed solution.                                                                                                |
+| Parallel analysis admission                                                                             | UNVERIFIED effectiveness; ESSENTIAL boundary if enabled | KEEP existing opt-in mechanism and default capacity 1. Native sessions supply concurrency; task admission protects exclusive writes and individual acceptance. No provider concurrency benefit claimed.                                                        |
+| Evaluation/diagnostic and telemetry infrastructure                                                      | ESSENTIAL evidence support; cost overhead UNVERIFIED    | KEEP existing fixtures and native usage reconciliation. No new telemetry or benchmark engine. Missing usage remains unknown, including failed attempts.                                                                                                        |
+| Primary broad exploration before delegation                                                             | UNVERIFIED behavioral overhead                          | EXPERIMENT with earlier instruction-based selection. Current trajectories do not establish that delegated exploration would have been cheaper.                                                                                                                 |
+
+A fresh single-task execution needs no repeated repository inventory, task plan or
+start call after registration. After a child returns, native checks and accept
+remain necessary. Re-reading a source to independently verify it or establish its
+freshness is not automatically redundant exploration. The current instruction
+file remains substantial because recovery, concurrency and safety branches are
+self-contained in global setup; this review does not hide them behind repository
+paths unavailable to an installed primary.
+
+### SELECTIVE and orchestrator-first
+
+Candidate A retains current SELECTIVE: cohesive diagnosis/edit/test loops,
+overlapping changes and known reads may run DIRECT; separable investigation and
+bounded execution may be delegated. The main model remains unchanged by worker
+tiers. Candidate B is an **experimental instruction policy on the same runtime**:
+choose the first bounded investigation from the request and available context
+before broad exploration, then preferentially delegate task execution. DIRECT
+exceptions are planning reads, independent checks, native verifiers, integration
+of accepted findings into the final artifact, and cohesive execution requiring
+unavailable worker capabilities such as shell. Record the applicable exception;
+apparent simplicity alone is insufficient. Failed delegation is still counted.
+This adaptation is less strict than the paper's Delegate/Finish-only system because
+the current safety boundary reserves shell verification for the primary.
+
+Evaluate reasoning difficulty separately from exploration effort, dispatch and
+handoff overhead, actual model capability, expected context growth and required
+verification. A simple question with many unknown callers may justify delegated
+lookup before parent exploration. A complex edit whose relevant context is already
+available may be cheaper DIRECT. Neither example supplies a deterministic policy
+or observed savings. Candidate B is not installed as the production default.
+
+The prepared comparison is
+[`work/minimal-orchestration/comparison.json`](../work/minimal-orchestration/comparison.json):
+three existing fixtures (`brownfield-cache-falsy`, `brownfield-analysis-callers`,
+`brownfield-pagination`), complete instruction variants, and six unrun observation
+rows. Run the existing SELECTIVE runner in isolated copies with only primary
+instructions differing; distinguish candidate labels from actual DIRECT/DELEGATE
+calls. Models, permissions, fixtures/oracles and authorized limits must match.
+Candidate B's DIRECT exceptions are instruction conditions, not a new permission
+runtime. Protocol violations invalidate its row. This preparation authorizes no
+inference; final model and run limits require approval before dispatch.
+
+Keep three evidence questions separate: forced delegation capability; autonomous
+selection under A/B; matched DIRECT/forced-DELEGATE execution effectiveness. The
+six proposed autonomous attempts address only the second. Record correctness,
+actual models/tools, child outcome, parent continuation, all model usage, complete
+workflow cost, latency and redundant exploration; count unsuccessful attempts.
+All six rows currently have unknown observations and verdict **INCONCLUSIVE**.
+No capability or economics verdict follows from a higher delegation rate.
+
+### Adopted changes and rollback
+
+- `instructions/aorchestra.md`: remove repeated minimal-change wording and worker
+  report/type instructions; clarify optional stale-plan refresh. Retain SELECTIVE,
+  provenance, repair, concurrency and acceptance guidance.
+- `instructions/aorchestra-executor.md`: remove duplicated report format and
+  repeated small-change wording; use the runtime-supplied report contract.
+- `plugins/aorchestra.ts`: shorten tool descriptions; keep a valid typed example
+  and unaccepted-result guidance. Move the complete report vocabulary/field
+  meanings into the existing generated prompt. Reuse one source fingerprint per
+  admission and remove an unused handoff property from the intermediate entry.
+- `tests/plugin.test.ts`: keep typed schema/example coverage; strengthen concurrent
+  child prompt checks for common source fingerprint, registered provenance,
+  complete report semantics and independent primary acceptance.
+
+Each removal has an existing replacement, rather than a new adapter. Rollback is
+the corresponding file hunk against the baseline above; no state migration or
+configuration rollback is needed. Two instruction files together lose 110 words
+and 800 characters. The generated report gains the explicit field vocabulary
+removed from the executor, preserving the full contract in one delivered place.
+Production TypeScript line count is unchanged; the unused handoff copy and
+repeated group fingerprint work are removed. This primarily reduces model
+context/maintenance duplication, rather than runtime size. No token, cost or
+task-success gain has been measured.
+
+### Evidence and recommendation
+
+Current deterministic and no-inference results are recorded in
+[VALIDATION.md](../VALIDATION.md#minimal-orchestration-simplification-2026-10-14).
+The original prepared diagnostic's harness snapshot and fixture fingerprint were
+intact at inspection; its source/profile differs from current source. A refreshed
+isolated preparation preserves its existing one-run protocol and makes zero model
+calls; see the [foundation reconciliation](real-model-core-validation.md#minimal-architecture-foundation-reconciliation-2026-10-14).
+Preparation, native catalog availability, mocked successful children and manually
+driven native leaf checks do not establish successful model-driven delegation.
+
+Historical evidence remains two verified autonomous DIRECT successes, one
+pre-delegation timeout and the malformed-call diagnostic with no admitted child.
+Their complete native successful-run usage is 109,976 / 116,370 tokens with zero
+native cost estimates; the failed cohort has incomplete usage. There is no matched
+completed child comparison, provider invoice or new inference in this review.
+**Delegation: structurally supported, model execution UNVERIFIED. Both routing
+candidates and their comparative efficiency: INCONCLUSIVE.**
+
+The harness has unnecessary presentation duplication, but its principal execution
+and acceptance mechanisms are not demonstrated replacements for native behavior.
+Remove proven duplicates now; retain the task-authority/evidence core. DIRECT
+differs from the specific paper architecture and may conceal beneficial delegation,
+but it has not been shown to undermine verified success or cost efficiency here.
+A smaller interface already preserves M/T/I/C by resolving I/C from registered
+state; keep explicit M/T and provenance. The highest expected ROI next action is
+the single bounded, freshly authorized delegation capability proof: it resolves
+the missing foundation before routing changes can be evaluated. No orchestrator-first
+production adoption is justified yet.

@@ -908,3 +908,31 @@ OpenCode 2.0.28 with zero model calls. Six added regressions exercise diagnostic
 boundaries; production routing, tuple composition and contract invariants are
 unchanged. Preparation and the exact proposed execution budget are archived in
 `work/delegation-foundation/prepared/prepared-diagnostic.json`.
+
+## Minimal orchestration simplification, 2026-10-14
+
+The [architecture review](docs/core-orchestration-audit.md#minimal-architecture-review-2026-10-14)
+removes repeated model-facing guidance and an unused delegation-entry field,
+and derives one prompt fingerprint from each atomic admission's source snapshot.
+The generated child prompt now owns the complete report format; parser and
+acceptance gates, dynamic M/T/I/C, permissions, SELECTIVE policy and configured
+budgets remain unchanged. Instruction files lose 110 words / 800 characters;
+this measures text reduction, not model token savings or task effectiveness.
+
+Observed checks on the final code: **233 tests PASS, 1,736 assertions**;
+typecheck and existing development/holdout corpus validation PASS. Native smoke,
+core probe and diagnostic registration probe PASS on OpenCode 2.0.28 with
+**modelCalls: 0**. Added assertions preserve group snapshot/provenance delivery,
+full report vocabulary and the boundary between partial reports and acceptance.
+Native callbacks are manually driven; successful child continuation in controlled
+tests uses mocked APIs.
+
+The original prepared proof's source/fixture fingerprints were checked and its
+archive preserved. A refreshed external preparation has effective 20/8-step agents,
+the existing one-invocation gate, valid catalog M/T and a ready no-inference
+preflight. It remains pending fresh explicit authorization. The comparison reuses
+three existing fixtures and the existing runtime with two instruction variants;
+all six proposed observation rows are unrun and INCONCLUSIVE. No provider inference,
+new economics measurement, experimental production routing or isolation claim
+is made. The exact remaining evidence is listed in the
+[foundation reconciliation](docs/real-model-core-validation.md#minimal-architecture-foundation-reconciliation-2026-10-14).

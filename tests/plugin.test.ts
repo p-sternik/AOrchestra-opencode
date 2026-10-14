@@ -4,6 +4,7 @@ import { resolve, join } from 'node:path';
 import type { Plugin } from '@opencode/plugin';
 import plugin from '../plugins/aorchestra';
 import { Ledger, type Handoff } from '../lib/core';
+import { fingerprint, snapshot } from '../lib/files';
 import archivedDelegation from './fixtures/delegation-contract.json';
 import { proofContext, requestBudget, readyForProof } from './fixtures/delegation-proof/gate';
 
@@ -904,7 +905,10 @@ test('delegation schema communicates structured arguments and executable example
     expect(schema.properties.tools.uniqueItems).toBe(true);
     expect(schema.required).toEqual(['taskId', 'model', 'tools', 'routingEvidence']);
     expect(tool.description).toContain('"tools":["read"]');
-    expect(tool.description).toContain('COMPLETE, PARTIAL or BLOCKED');
+    expect(tool.description).toContain(
+      'reuse its instruction, context, scope, verifiers and handoff',
+    );
+    expect(tool.description).toContain('Results remain unaccepted');
   } finally {
     await f.clean();
   }
@@ -1770,6 +1774,24 @@ test('group analyses overlap at capacity, retain individual review and accept wh
     const group = f.invoke('aorchestra_delegate', { tasks: ['a', 'b', 'c'].map(delegateItem) });
     await entered;
     expect(f.prompts).toHaveLength(3);
+    const sourceSnapshot = fingerprint(await snapshot(f.root));
+    for (const prompt of f.prompts) {
+      expect(prompt.text).toContain(
+        `SOURCE SNAPSHOT AT DELEGATION (not a Git revision)\n${sourceSnapshot}`,
+      );
+      expect(prompt.text).toContain(JSON.stringify(f.task.handoff));
+      expect(prompt.text).toContain(
+        'Return STATUS, RESULT, EVIDENCE, CHANGED, OPEN exactly once as FIELD: value lines.',
+      );
+      expect(prompt.text).toContain('STATUS: COMPLETE, PARTIAL or BLOCKED');
+      expect(prompt.text).toContain(
+        'COMPLETE requires evidence for the entire supplied outcome and OPEN: none',
+      );
+      expect(prompt.text).toContain(
+        'unavailable primary validation remains OPEN and means PARTIAL',
+      );
+      expect(prompt.text).toContain('Your report does not accept the task');
+    }
     const ledger = new Ledger(f.ctx.storage);
     expect((await ledger.read('primary')).tasks.map((t) => t.status)).toEqual([
       'running',

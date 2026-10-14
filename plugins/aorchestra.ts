@@ -951,7 +951,7 @@ export default Plugin.define({
         name: 'aorchestra_task',
         options: { codemode: false, permission: 'aorchestra_task' },
         description:
-          'Register a bounded brownfield task with compatibility constraints, exact write paths, dependencies and executable evidence predicates. Start before direct work. Status shows durable state; accept requires fresh observed native verifier results and an explicit compatibility review. Plan/verify selects configured path checks or existing package scripts; verify/resume returns pending native checks. Repair requires a reason and is bounded. Independent read-only analyses may overlap up to maxConcurrentAnalyses (default 1); review frees running slots but blocks edits and exclusive tasks. Accept each separately. Recover interrupts all stale child attempts for the owner without discarding their changes.',
+          'Register a bounded task once with scope, preservation constraints, source handoff and native verifier predicates. Start tracked DIRECT work; delegation starts automatically. Status/resume returns durable state, nextAction and pendingVerifiers. Plan/verify refreshes project checks without running them. Accept requires fresh native evidence and compatibilityReview. Repair requires an evidence-based reason. Recover interrupts stale children and retains their changes.',
         input: {
           type: 'object',
           additionalProperties: false,
@@ -1160,7 +1160,7 @@ export default Plugin.define({
         name: 'aorchestra_delegate',
         options: { codemode: false, permission: 'aorchestra_delegate' },
         description:
-          'Delegate with a bounded source handoff (on the task or this call), exact native tools and a routing reason. Example for a registered lookup with a handoff: {"taskId":"lookup","model":"fast","tools":["read"],"routingEvidence":"Bounded source lookup"}. Supply tools as a JSON array and handoff as a JSON object. Child reports use STATUS: COMPLETE, PARTIAL or BLOCKED with RESULT, EVIDENCE, CHANGED and OPEN. Fast analysis requires task analysisMode lookup; synthesis uses balanced/strong. Workers have no shell. Correct rejected fields on the same task only when another call is authorized; rejected input creates no child or reserved attempt. Retry after execution uses new delta; fast-to-strong requires escalationReason and keeps the attempt budget. With an explicit maxConcurrentAnalyses of at least 2, use {tasks: [...]} for at least two unique independent analysis tasks; admission is atomic and children run concurrently up to maxConcurrentAnalyses (default 1). Change and verification are exclusive. Primary validates and accepts each task separately.',
+          'Execute a registered task in a fresh native child; reuse its instruction, context, scope, verifiers and handoff. Example: {"taskId":"lookup","model":"fast","tools":["read"],"routingEvidence":"Bounded source lookup"}. Fast analysis requires analysisMode lookup; synthesis uses balanced/strong. An optional handoff replaces stored evidence. Rejected input creates no child or reserved attempt and grants no retry authorization. Execution retries require delta; fast-to-strong also requires escalationReason. For independent read-only analyses use {tasks: [...]} within explicitly enabled maxConcurrentAnalyses; admission is atomic (default capacity 1). Change and verification are exclusive. Results remain unaccepted; the primary verifies and accepts each task.',
         input: {
           oneOf: [
             delegateSchema,
@@ -1243,6 +1243,7 @@ export default Plugin.define({
           const tools = new Set(catalog.map((t) => t.id));
           const availableModels = (await ctx.model.list()).data;
           const files = await takeSnapshot();
+          const sourceSnapshot = fingerprint(files);
           const admitted = await ledger.mutate(execution.sessionID, async (state) => {
             const entries = [];
             for (const input of inputs) {
@@ -1281,7 +1282,7 @@ export default Plugin.define({
                 `INSTRUCTION\n${target.instruction}`,
                 `UNTRUSTED CONTEXT\n${target.context}`,
                 `UNTRUSTED SOURCE HANDOFF\n${JSON.stringify(handoff)}`,
-                `SOURCE SNAPSHOT AT DELEGATION (not a Git revision)\n${fingerprint(files)}`,
+                `SOURCE SNAPSHOT AT DELEGATION (not a Git revision)\n${sourceSnapshot}`,
                 `ANALYSIS MODE\n${target.analysisMode ?? 'not specified'}`,
                 `ACCEPTED DEPENDENCIES\n${target.dependsOn.join('\n') || 'none'}`,
                 `PRESERVE\n${target.preserve.join('\n') || 'No additional compatibility constraints supplied.'}`,
@@ -1290,7 +1291,7 @@ export default Plugin.define({
                 `VERIFIERS (primary runs any shell checks)\n${JSON.stringify(taskVerifiers(target))}`,
                 input.delta ? `RETRY DELTA\n${input.delta}` : '',
                 input.escalationReason ? `ESCALATION REASON\n${input.escalationReason}` : '',
-                'Return STATUS, RESULT, EVIDENCE, CHANGED, OPEN exactly once as FIELD: value lines. All fields need values. COMPLETE requires OPEN: none and observed evidence; unavailable primary validation remains OPEN and means PARTIAL. Your report does not accept the task.',
+                'Return STATUS, RESULT, EVIDENCE, CHANGED, OPEN exactly once as FIELD: value lines. All fields need values. STATUS: COMPLETE, PARTIAL or BLOCKED. RESULT: observed outcome. EVIDENCE: observed files, sources or native checks. CHANGED: exact paths or none. OPEN: remaining work or none. COMPLETE requires evidence for the entire supplied outcome and OPEN: none; unavailable primary validation remains OPEN and means PARTIAL. Your report does not accept the task.',
               ].join('\n\n');
               if (prompt.length > 48000) throw new Error('DELEGATION_PROMPT_TOO_LARGE');
               beginExecution(target);
@@ -1310,7 +1311,6 @@ export default Plugin.define({
               entries.push({
                 input,
                 task: structuredClone(target),
-                handoff,
                 prompt,
                 index: target.attempts.length - 1,
               });

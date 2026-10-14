@@ -720,3 +720,47 @@ real-model foundation is BLOCKED, autonomous routing/economics UNVERIFIED.
 
 Next smallest action: fresh authorization for exactly the manifest's single
 bounded diagnostic, followed by evidence collection and independent acceptance.
+
+## Minimal architecture foundation reconciliation, 2026-10-14
+
+The [minimal architecture review](core-orchestration-audit.md#minimal-architecture-review-2026-10-14)
+retains the existing delegation path. No provider-backed run was authorized or
+launched. Model-driven child execution and parent continuation remain
+**UNVERIFIED**; autonomous selection and comparative economics remain
+**INCONCLUSIVE**.
+
+The original `work/delegation-foundation/prepared/prepared-diagnostic.json` was
+inspected without dispatch. All archived `source-hashes.json` entries matched its
+copied harness, and SHA-256 of the serialized fixture matched `fixtureSHA256`.
+Its recorded preflight was ready with zero model calls. Four entries differed
+from the current checkout before this review's edits: `eval/cases.json` and
+`opencode.json` intentionally specialize the proof, while `package.json` and
+`scripts/prepare-delegation-proof.ts` also belong to an older source snapshot.
+Historical readiness is not current provider health. The original archive was
+preserved; it cannot establish the behavior of the simplified source.
+
+A fresh no-inference preparation is stored at
+[`work/delegation-foundation/simplified-prepared/prepared-diagnostic.json`](../work/delegation-foundation/simplified-prepared/prepared-diagnostic.json).
+It uses an external isolated workspace, OpenCode 2.0.28, the active evaluation
+wrapper, effective primary/child steps 20/8 and a catalog-listed tool-capable
+`opencode/mimo-v2.6-flash-free`. Preflight is ready, original fixture regression
+and scope pass, and the target behavioral assertion fails before implementation
+as expected. No prompt was sent and `modelCalls` is zero.
+
+The protocol is unchanged: one primary run, one delegate invocation/admission,
+one child attempt, 20/8 primary/child steps, 180-second child timeout,
+600-second CLI timeout plus five-second cleanup grace, zero repairs, reruns,
+provider retries or auxiliary inference, at most 28 primary/child request sends.
+The manifest is **BLOCKED_AWAITING_FRESH_AUTHORIZATION**. The separate proposed
+six-attempt routing comparison is not covered by this protocol or past approval.
+
+Current controlled tests cover stored handoff delivery, structured report parsing,
+partial results returned as unaccepted observations, primary continuation/acceptance,
+atomic groups, cancellation and stale evidence. Native no-inference probes verify
+registered typed arguments, child session configuration/permissions, real leaf
+execution and negative admission controls. The remaining provider-backed evidence
+is exactly a model-generated valid delegate call, actual selected child M/T and
+delivered I/C, succeeded native child outcome with file-backed report, parent
+consumption, fresh native checks, explicit acceptance and continued artifact
+completion under the independent oracle. No deterministic test substitutes for
+those observations.
