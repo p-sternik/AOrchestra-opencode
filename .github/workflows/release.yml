@@ -10,6 +10,19 @@ on:
         required: false
         type: string
 
+      source_run:
+        description: Internal continuation - run containing successful release PR validation
+        required: false
+        type: string
+      validated_sha:
+        description: Internal continuation - validated release PR commit
+        required: false
+        type: string
+      merged_sha:
+        description: Internal continuation - resulting merge commit
+        required: false
+        type: string
+
 concurrency:
   group: release-main
   cancel-in-progress: false
@@ -18,12 +31,38 @@ permissions:
   contents: read
 
 jobs:
-  validate-main:
+  prepare-validation:
     if: ${{ github.ref == 'refs/heads/main' && inputs.publish_tag == '' }}
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      reused: ${{ steps.evidence.outputs.reused }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Check previous validation evidence
+        id: evidence
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_RUN: ${{ inputs.source_run }}
+          VALIDATED_SHA: ${{ inputs.validated_sha }}
+          MERGED_SHA: ${{ inputs.merged_sha }}
+        run: python .github/scripts/release-validation.py main
+  validate-main:
+    needs: prepare-validation
+    if: ${{ github.ref == 'refs/heads/main' && inputs.publish_tag == '' && needs.prepare-validation.outputs.reused != 'true' }}
     uses: ./.github/workflows/validate.yml
   release:
-    needs: validate-main
-    if: ${{ github.ref == 'refs/heads/main' && inputs.publish_tag == '' }}
+    needs: [prepare-validation, validate-main]
+    if: >-
+      ${{ !cancelled() && github.ref == 'refs/heads/main' && inputs.publish_tag == '' &&
+          needs.prepare-validation.result == 'success' &&
+          (needs.validate-main.result == 'success' ||
+           (needs.validate-main.result == 'skipped' && needs.prepare-validation.outputs.reused == 'true')) }}
     runs-on: ubuntu-24.04
     permissions:
       contents: write
@@ -35,6 +74,21 @@ jobs:
       release_created: ${{ steps.release.outputs.release_created }}
       tag_name: ${{ steps.release.outputs.tag_name }}
     steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        if: needs.prepare-validation.outputs.reused == 'true'
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Record validation inherited from identical release PR tree
+        if: needs.prepare-validation.outputs.reused == 'true'
+        run: python .github/scripts/release-validation.py record
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: needs.prepare-validation.outputs.reused == 'true'
+        with:
+          name: validation-${{ github.sha }}-${{ github.run_attempt }}
+          path: validation.json
+          if-no-files-found: error
+          retention-days: 90
       - uses: googleapis/release-please-action@0dfd8538845b8e92600d271a895a5372865d4062 # v5
         id: release
         with:
@@ -82,13 +136,15 @@ jobs:
               and .user.login == "github-actions[bot]"
               and any(.labels[]; .name == "autorelease: pending")
             then .number else error("Release PR identity or validated revision changed") end'
-          gh api --method PUT "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER/merge" \
+          merged_sha=$(gh api --method PUT "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER/merge" \
             -f sha="$PR_HEAD_SHA" -f merge_method=squash \
-            --jq 'if .merged then .sha else error(.message) end'
+            --jq 'if .merged then .sha else error(.message) end')
+          [[ "$merged_sha" =~ ^[0-9a-f]{40}$ ]] || exit 1
           # GITHUB_TOKEN merges do not trigger push workflows; dispatch explicitly.
-          gh workflow run release.yml --repo "$GITHUB_REPOSITORY" --ref main
+          gh workflow run release.yml --repo "$GITHUB_REPOSITORY" --ref main \
+            -f source_run="$GITHUB_RUN_ID" -f validated_sha="$PR_HEAD_SHA" -f merged_sha="$merged_sha"
 
-  publish-npm:
+  prepare-publication:
     needs: release
     # A tag retry deliberately skips release creation and its main validation.
     # The status predicate allows that skipped dependency, while an ordinary
@@ -98,21 +154,57 @@ jobs:
           ((inputs.publish_tag != '' && github.event_name == 'workflow_dispatch' && needs.release.result == 'skipped') ||
            (inputs.publish_tag == '' && needs.release.result == 'success' && needs.release.outputs.release_created == 'true')) }}
     runs-on: ubuntu-24.04
+    outputs:
+      sha: ${{ steps.evidence.outputs.sha }}
+      reused: ${{ steps.evidence.outputs.reused }}
+      tag: ${{ inputs.publish_tag || needs.release.outputs.tag_name }}
     permissions:
       contents: read
-      id-token: write
+      actions: read
     env:
       RELEASE_TAG: ${{ inputs.publish_tag || needs.release.outputs.tag_name }}
       GH_TOKEN: ${{ github.token }}
     steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
       - name: Validate published GitHub release
         run: |
           [[ "$RELEASE_TAG" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || exit 1
           gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json isDraft --jq 'if .isDraft then error("Draft release") else true end'
+      - name: Check tagged commit validation evidence
+        id: evidence
+        run: python .github/scripts/release-validation.py publish
+
+  validate-tag:
+    needs: prepare-publication
+    if: ${{ needs.prepare-publication.outputs.reused != 'true' }}
+    uses: ./.github/workflows/validate.yml
+    with:
+      ref: ${{ needs.prepare-publication.outputs.sha }}
+
+  publish-npm:
+    needs: [prepare-publication, validate-tag]
+    if: >-
+      ${{ !cancelled() && needs.prepare-publication.result == 'success' &&
+          (needs.validate-tag.result == 'success' ||
+           (needs.validate-tag.result == 'skipped' && needs.prepare-publication.outputs.reused == 'true')) }}
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      RELEASE_TAG: ${{ needs.prepare-publication.outputs.tag }}
+      RELEASE_SHA: ${{ needs.prepare-publication.outputs.sha }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           ref: refs/tags/${{ env.RELEASE_TAG }}
           persist-credentials: false
+      - name: Check tag still identifies the validated commit
+        run: test "$(git rev-parse HEAD)" = "$RELEASE_SHA"
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: '24'
@@ -125,8 +217,6 @@ jobs:
       - name: Check version matches tag
         run: node -e 'if(require("./package.json").version!==process.env.RELEASE_TAG)process.exit(1)'
       - run: npm ci --ignore-scripts
-      - run: bun run typecheck
-      - run: bun run test
       - run: bun scripts/version-check.ts
       - run: npm run pack:check
       - name: Pack release and verify registry integrity

@@ -5,6 +5,10 @@ on:
   workflow_dispatch:
   workflow_call:
     inputs:
+      record_validation:
+        description: Store evidence after the complete validation matrix succeeds
+        type: boolean
+        default: true
       ref:
         description: Git ref to validate
         type: string
@@ -47,10 +51,43 @@ jobs:
         with:
           bun-version: '1.2.15'
       - run: npm ci --ignore-scripts
-      - run: npm run format:check
+      - if: matrix.os == 'ubuntu-24.04' && matrix.node-version == '24'
+        run: npm run format:check
       - run: bun run typecheck
       - run: bun run test
-      - run: bun run eval:check
-      - run: python -m unittest discover -s tests -p '*_test.py'
-      - run: bun scripts/version-check.ts
+      - if: matrix.os == 'ubuntu-24.04' && matrix.node-version == '24'
+        run: bun run eval:check
+      - if: matrix.os == 'ubuntu-24.04' && matrix.node-version == '24'
+        run: python -m unittest discover -s tests -p '*_test.py'
+      - if: matrix.os == 'ubuntu-24.04' && matrix.node-version == '24'
+        run: bun scripts/version-check.ts
       - run: npm run pack:check
+
+  receipt:
+    if: inputs.record_validation
+    needs: validate
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+          persist-credentials: false
+      - name: Record successful matrix validation
+        # Older release tags may not contain the helper script.
+        run: |
+          python - <<'PYTHON'
+          import json, os, subprocess
+          def git(ref):
+              return subprocess.check_output(['git', 'rev-parse', ref], text=True).strip()
+          with open('validation.json', 'w') as output:
+              json.dump(dict(sha=git('HEAD'), tree=git('HEAD^{tree}'),
+                  repository=os.environ['GITHUB_REPOSITORY'],
+                  run_id=os.environ['GITHUB_RUN_ID'],
+                  run_attempt=os.environ['GITHUB_RUN_ATTEMPT']), output)
+          PYTHON
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: validation-${{ inputs.ref || github.sha }}-${{ github.run_attempt }}
+          path: validation.json
+          if-no-files-found: error
+          retention-days: 90
