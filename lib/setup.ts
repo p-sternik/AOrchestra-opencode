@@ -5,6 +5,7 @@ import { randomUUID } from 'node:crypto';
 import { BUNDLED_SKILL_ID } from './core';
 import legacyPermissions from './primary-permissions-v0.json';
 import v050Permissions from './primary-permissions-v050.json';
+import v090Permissions from './primary-permissions-v090.json';
 
 type RecordValue = Record<string, any>;
 export type Models = { primary: string; fast: string; balanced: string; strong: string };
@@ -29,7 +30,7 @@ export function primaryPermissions(
   const rules = normalizedPermissions(prior);
   if (
     rules === undefined ||
-    [legacyPermissions, v050Permissions].some(
+    [legacyPermissions, v050Permissions, v090Permissions].some(
       (defaults) => permissionKey(rules) === permissionKey(defaults),
     )
   )

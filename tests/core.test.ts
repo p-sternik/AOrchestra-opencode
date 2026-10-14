@@ -113,7 +113,7 @@ test('analysis cannot get shell, Code Mode, edits or MCP mutations', () => {
   validateTools(t, ['read', 'grep'], new Set(['read', 'grep']));
 });
 test('change worker cannot get arbitrary shell or delegate', () => {
-  for (const tool of ['shell', 'subagent', 'aorchestra_delegate'])
+  for (const tool of ['shell', 'subagent', 'aorchestra_delegate', 'execute', 'opencode'])
     expect(() => validateTools(task(), [tool], new Set([tool]))).toThrow();
 });
 test('native rules have exact edit paths and finish with an external-directory denial', () => {
@@ -234,9 +234,53 @@ test('source handoff distinguishes candidates and unknown revisions and rejects 
     validateHandoff({ ...handoff, sources: [{ ...handoff.sources[0], revision: ' ' }] }),
   ).toThrow('HANDOFF_SOURCES_INVALID');
   expect(() =>
-    validateHandoff({ ...handoff, facts: Array.from({ length: 10 }, () => 'x'.repeat(1500)) }),
+    validateHandoff({
+      ...handoff,
+      facts: Array.from({ length: 10 }, (_, i) => `${i}${'x'.repeat(1499)}`),
+    }),
   ).toThrow('HANDOFF_TOO_LARGE');
 });
+test('tools reject encoded strings and invalid elements with field-specific errors', () => {
+  const catalog = new Set(['read', 'grep', 'shell']);
+  for (const tools of [undefined, null, '["read"]', {}, 1])
+    expect(() => validateTools(task(), tools as any, catalog)).toThrow('TOOLS_ARRAY_REQUIRED');
+  for (const tools of [[1], [''], [' '], ['read', null]])
+    expect(() => validateTools(task(), tools as any, catalog)).toThrow('TOOLS_ITEMS_INVALID');
+  expect(() => validateTools(task(), ['read', 'read'], catalog)).toThrow('DUPLICATE_TOOLS');
+  validateTools(task(), ['read', 'grep'], catalog);
+  expect(() =>
+    validateTools({ ...task(), kind: 'analysis', writePaths: [] }, ['shell'], catalog),
+  ).toThrow();
+});
+
+test('handoff rejects non-object representations and identifies malformed source and required fields', () => {
+  const valid = {
+    sources: [{ ref: 'api.ts', status: 'candidate', revision: 'unknown' }],
+    facts: [],
+    unknowns: [],
+    checks: [],
+  };
+  for (const handoff of [JSON.stringify(valid), [], null, false])
+    expect(() => validateHandoff(handoff as any)).toThrow('HANDOFF_OBJECT_REQUIRED');
+  for (const handoff of [
+    { ...valid, sources: '[]' },
+    { ...valid, sources: [null] },
+    { ...valid, sources: [{ ref: 'api.ts', status: 'candidate' }] },
+    { ...valid, sources: [{ ...valid.sources[0], extra: true }] },
+  ])
+    expect(() => validateHandoff(handoff as any)).toThrow('handoff.sources');
+  for (const field of ['sources', 'facts', 'unknowns', 'checks']) {
+    const handoff: any = { ...valid };
+    delete handoff[field];
+    expect(() => validateHandoff(handoff)).toThrow(`handoff.${field}`);
+  }
+  expect(() => validateHandoff({ ...valid, extra: true } as any)).toThrow('HANDOFF_FIELDS_INVALID');
+  expect(() => validateHandoff({ ...valid, facts: ['same', 'same'] } as any)).toThrow(
+    'HANDOFF_ITEMS_INVALID',
+  );
+  validateHandoff(valid as any);
+});
+
 test('retry requires delta; independent task waits for acceptance and is not a retry', () => {
   const s = state();
   const first = task();

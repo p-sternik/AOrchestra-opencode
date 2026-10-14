@@ -46,9 +46,13 @@ export async function command(
     let stdout = '',
       stderr = '';
     let expired = false;
+    let forceTimer: ReturnType<typeof setTimeout> | undefined;
     const timer = setTimeout(() => {
       expired = true;
-      child.kill();
+      // Native CLI SIGINT requests session interruption; SIGTERM instead shuts
+      // down its standalone server and can retain a resumable execution claim.
+      child.kill('SIGINT');
+      forceTimer = setTimeout(() => child.kill('SIGKILL'), 5000);
     }, timeoutMs);
     child.stdout.on('data', (data) => {
       const chunk = data.toString();
@@ -60,10 +64,12 @@ export async function command(
     });
     child.on('error', (error) => {
       clearTimeout(timer);
+      clearTimeout(forceTimer);
       reject(error);
     });
     child.on('close', (code) => {
       clearTimeout(timer);
+      clearTimeout(forceTimer);
       if (expired) reject(new Error('CLI_TIMEOUT'));
       else if (code !== 0) reject(new Error(`CLI_EXIT_${code}: ${stderr.slice(-3000)}`));
       else resolve(stdout);

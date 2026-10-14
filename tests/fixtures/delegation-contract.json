@@ -1,0 +1,84 @@
+{
+  "sourceSessionID": "ses_ec642f088ffe8O4HJxWVIrpI2N",
+  "registration": {
+    "operation": "register",
+    "taskId": "config-zero-lookup",
+    "task": {
+      "id": "config-zero-lookup",
+      "kind": "analysis",
+      "analysisMode": "lookup",
+      "instruction": "Read the file config.js in the working directory in full. Identify every exported setting whose definition uses truthiness such that an explicit zero value (the number 0) would be discarded or replaced (for example defaults written with `||`, falsy checks, or `value ? value : fallback` patterns). Report each such exported setting by name with file-backed evidence (config.js:LINE and the exact code text). Do not modify, create, or delete any file. Respond using exactly these fields: STATUS (SUCCESS or FAILURE), RESULT (sorted comma-separated list of setting names, or NONE), EVIDENCE (for each finding: config.js:LINE followed by the exact code snippet; for each notable non-finding you checked, a brief line reference), CHANGED (list of files you changed; must be empty), OPEN (unresolved questions, ambiguities, or unknowns; write NONE if there are none).",
+      "context": "Forced-delegation capability test workspace at /tmp/aorchestra-delegation-proof-krs02uq3/run-forced/selective-brownfield-analysis-callers-ZfWlm6/workspace. Project conventions (AGENTS.md): ES modules, node:assert/strict, preserve exports and caller data. The primary will later assemble findings.json; the child must not write anything. Source files are read-only. This child's scope is only config.js exported settings and explicit-zero discarding; parse-function caller analysis is owned by the primary separately.",
+      "dependsOn": [],
+      "writePaths": [],
+      "preserve": [
+        "config.js",
+        "parse.js",
+        "safe.js",
+        "unsafe.js",
+        "regression.test.js",
+        "package.json",
+        "AGENTS.md"
+      ],
+      "handoff": {
+        "sources": [
+          {
+            "ref": "config.js",
+            "status": "candidate",
+            "revision": "unknown"
+          }
+        ],
+        "facts": [
+          "package.json declares type: module (ES modules)",
+          "AGENTS.md requires ES modules, node:assert/strict, preserving exports and caller data",
+          "regression.test.js is the npm test entry (node regression.test.js)"
+        ],
+        "unknowns": [
+          "Which exported settings in config.js discard an explicit zero via truthiness",
+          "Whether every export in config.js is a setting with a default value",
+          "Current revision of config.js is unknown (no git repository)"
+        ],
+        "checks": [
+          "Native read verifier 'config-read' against config.js is registered and will be executed by the primary; not yet run at registration time"
+        ]
+      },
+      "verifiers": [
+        {
+          "id": "config-read",
+          "tool": "read",
+          "input": {
+            "path": "config.js"
+          },
+          "expect": {
+            "contains": "export"
+          }
+        }
+      ]
+    }
+  },
+  "calls": [
+    {
+      "messageID": "msg_139bea9650012lc7TeI19QdKTS",
+      "input": {
+        "taskId": "config-zero-lookup",
+        "model": "fast",
+        "tools": "[\"read\", \"grep\", \"glob\"]",
+        "routingEvidence": "Bounded fact lookup: single-file inspection of config.js for exported settings discarding explicit zero; objective file-backed read verifier; no edits or shell needed, fitting the fast lookup tier.",
+        "delta": "Initial and only attempt: inspect config.js and report exported settings that discard an explicit zero, with STATUS/RESULT/EVIDENCE/CHANGED/OPEN fields.",
+        "handoff": "{\"sources\": [{\"ref\": \"config.js\", \"status\": \"candidate\", \"revision\": \"unknown\"}], \"facts\": [\"package.json declares type: module (ES modules)\", \"AGENTS.md requires ES modules, node:assert/strict, preserving exports and caller data\", \"regression.test.js is the npm test entry (node regression.test.js)\"], \"unknowns\": [\"Which exported settings in config.js discard an explicit zero via truthiness\", \"Whether every export in config.js is a setting with a default value\", \"Current revision of config.js is unknown (no git repository)\"], \"checks\": [\"Native read verifier 'config-read' against config.js registered; to be executed by the primary after the child returns; not yet run\"]}"
+      },
+      "originalError": "HANDOFF_SOURCES_INVALID"
+    },
+    {
+      "messageID": "msg_139bf41c4001S3ueotpr0PsUAP",
+      "input": {
+        "taskId": "config-zero-lookup",
+        "model": "fast",
+        "tools": "[\"read\", \"grep\", \"glob\"]",
+        "routingEvidence": "Bounded fact lookup: single-file inspection of config.js for exported settings discarding explicit zero; objective file-backed read verifier; no edits or shell needed, fitting the fast lookup tier.",
+        "delta": "Initial attempt using the registered task handoff: inspect config.js and report exported settings that discard an explicit zero, with STATUS/RESULT/EVIDENCE/CHANGED/OPEN fields."
+      },
+      "originalError": "DUPLICATE_TOOLS"
+    }
+  ]
+}

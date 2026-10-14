@@ -4,8 +4,11 @@ import { resolve, join } from 'node:path';
 import type { Plugin } from '@opencode/plugin';
 import plugin from '../plugins/aorchestra';
 import { Ledger, type Handoff } from '../lib/core';
+import { fingerprint, snapshot } from '../lib/files';
+import archivedDelegation from './fixtures/delegation-contract.json';
+import { proofContext, requestBudget, readyForProof } from './fixtures/delegation-proof/gate';
 
-async function fixture(options: Record<string, unknown> = {}) {
+async function fixture(options: Record<string, unknown> = {}, proof = false) {
   const scratch = resolve(import.meta.dir, '../work/aorchestra-v2-tests');
   await mkdir(scratch, { recursive: true });
   const root = await mkdtemp(join(scratch, 'run-'));
@@ -13,6 +16,10 @@ async function fixture(options: Record<string, unknown> = {}) {
   const data = new Map<string, unknown>();
   const hooks = new Map<string, (event: any) => Promise<void>>();
   const tools = new Map<string, any>();
+  const searchMatches: any[] = [];
+  tools.set('grep', {
+    execute: async () => ({ output: searchMatches, content: 'search results' }),
+  });
   const creations: any[] = [];
   const interruptions: any[] = [];
   const prompts: any[] = [];
@@ -63,7 +70,10 @@ async function fixture(options: Record<string, unknown> = {}) {
     },
     session: {
       hook: async (name: string, callback: any) => {
-        hooks.set(`session:${name}`, callback);
+        hooks.set(
+          `session:${name}`,
+          name === 'context' ? (event: any) => callback({ system: [], ...event }) : callback,
+        );
       },
       get: async ({ sessionID }: any) => ({
         id: sessionID,
@@ -108,12 +118,31 @@ async function fixture(options: Record<string, unknown> = {}) {
       hook: async (name: string, callback: any) => {
         hooks.set(`tool:${name}`, callback);
       },
-      list: async () => ['read', 'patch', 'shell', 'execute'].map((id) => ({ id })),
+      list: async () =>
+        ['read', 'grep', 'patch', 'shell', 'execute'].map((id) => ({
+          id,
+          options: { codemode: false },
+        })),
       transform: async (callback: any) =>
-        callback({ add: (tool: any) => tools.set(tool.name, tool) }),
+        callback({
+          add: (tool: any) => tools.set(tool.name, tool),
+          update: (id: string, update: any) => {
+            if (tools.has(id)) update(tools.get(id));
+          },
+        }),
+    },
+    model: {
+      list: async () => ({
+        data: ['gpt-5.6-luna', 'gpt-5.6-terra', 'gpt-5.6-sol'].map((id) => ({
+          providerID: 'github-copilot',
+          id,
+          capabilities: { tools: true },
+          variants: [],
+        })),
+      }),
     },
   } as unknown as Plugin.Context;
-  const cleanup = await plugin.setup(ctx);
+  const cleanup = await plugin.setup(proof ? proofContext(ctx) : ctx);
   const execution = {
     sessionID: 'primary',
     agent: 'aorchestra',
@@ -132,7 +161,7 @@ async function fixture(options: Record<string, unknown> = {}) {
       unknowns: [],
       checks: ['Regression test not run'],
     },
-    dependsOn: [],
+    dependsOn: [] as string[],
     writePaths: ['api.ts'],
     preserve: ['oldApi export remains'],
     verifiers: [
@@ -181,6 +210,7 @@ async function fixture(options: Record<string, unknown> = {}) {
     ctx,
     hooks,
     tools,
+    searchMatches,
     data,
     creations,
     interruptions,
@@ -374,7 +404,7 @@ test('legacy concurrent running and review tasks cannot choose a primary edit ow
   }
 });
 
-test('native token budgets count reasoning and cache read/write for primary and executor', async () => {
+test('native token warnings count reasoning and cache without blocking primary or executor', async () => {
   for (const agent of ['aorchestra', 'aorchestra-executor']) {
     const f = await fixture({ maxSessionTokens: 100 });
     try {
@@ -409,16 +439,15 @@ test('native token budgets count reasoning and cache read/write for primary and 
         const context = {
           agent,
           sessionID,
-          tools: {},
+          tools: { read: {} },
           options: {},
-          system: [],
+          system: [] as any[],
           model: { providerID: 'test', id: 'model' },
         };
-        if (cacheRead + cacheWrite === 84) await f.hooks.get('session:context')!(context);
-        else
-          await expect(f.hooks.get('session:context')!(context)).rejects.toThrow(
-            'SESSION_TOKEN_BUDGET_EXCEEDED',
-          );
+        await f.hooks.get('session:context')!(context);
+        const warning = context.system.find((item) => item.text.includes('session usage is high'));
+        expect(warning.text).toContain(`\"consumed\":${15 + cacheRead + cacheWrite}`);
+        expect(warning.text).toContain('does not block dispatch');
       }
     } finally {
       await f.clean();
@@ -718,6 +747,173 @@ test('delegate creates native session with permissions and returns unaccepted re
   }
 });
 
+test.each(archivedDelegation.calls)(
+  'archived malformed delegation call identifies field types before state or child creation: %j',
+  async (call) => {
+    const f = await fixture();
+    try {
+      await f.invoke('aorchestra_task', archivedDelegation.registration);
+      const ledger = new Ledger(f.ctx.storage);
+      const before = await ledger.read('primary');
+      await expect(f.invoke('aorchestra_delegate', call.input)).rejects.toThrow(
+        call.originalError === 'HANDOFF_SOURCES_INVALID'
+          ? 'HANDOFF_OBJECT_REQUIRED: handoff must be a JSON object'
+          : 'TOOLS_ARRAY_REQUIRED: tools must be a JSON array',
+      );
+      expect(await ledger.read('primary')).toEqual(before);
+      expect(f.creations).toHaveLength(0);
+      expect(f.prompts).toHaveLength(0);
+    } finally {
+      await f.clean();
+    }
+  },
+);
+
+test('corrected archived structured payload reuses task and handoff without spending a failed attempt', async () => {
+  const f = await fixture({ maxDelegations: 1, maxAttempts: 1 });
+  try {
+    await f.invoke('aorchestra_task', archivedDelegation.registration);
+    const call = archivedDelegation.calls[0].input;
+    await expect(f.invoke('aorchestra_delegate', call)).rejects.toThrow('HANDOFF_OBJECT_REQUIRED');
+    const catalog = await f.ctx.tool.list();
+    (f.ctx.tool as any).list = async () => [
+      ...catalog,
+      { id: 'glob', options: { codemode: false } },
+    ];
+    const corrected = { ...archivedDelegation.calls[1].input, tools: JSON.parse(call.tools) };
+    const result = await f.invoke('aorchestra_delegate', corrected);
+    expect(result.metadata.accepted).toBe(false);
+    expect(f.creations).toHaveLength(1);
+    expect(f.prompts[0].text).toContain(
+      JSON.stringify(archivedDelegation.registration.task.handoff),
+    );
+    expect(f.creations[0].permissions).toContainEqual({
+      action: '*',
+      resource: '*',
+      effect: 'deny',
+    });
+    expect(f.creations[0].permissions).toContainEqual({
+      action: 'read',
+      resource: '*',
+      effect: 'allow',
+    });
+    const state = await new Ledger(f.ctx.storage).read('primary');
+    expect(state.delegations).toBe(1);
+    expect(state.tasks[0].attempts).toHaveLength(1);
+    expect(state.tasks[0].workflow!.repairs).toBe(0);
+    expect(state.tasks[0].status).toBe('review');
+  } finally {
+    await f.clean();
+  }
+});
+
+test('delegation required fields and typed optional fields reject malformed inputs without mutation', async () => {
+  const f = await fixture();
+  try {
+    await f.register();
+    const valid = {
+      taskId: 'api',
+      model: 'fast',
+      tools: ['read'],
+      routingEvidence: 'Bounded lookup',
+    };
+    const ledger = new Ledger(f.ctx.storage);
+    const before = await ledger.read('primary');
+    for (const field of ['taskId', 'model', 'tools', 'routingEvidence']) {
+      const input: any = { ...valid };
+      delete input[field];
+      await expect(f.invoke('aorchestra_delegate', input)).rejects.toThrow(field);
+      expect(await ledger.read('primary')).toEqual(before);
+    }
+    for (const input of [
+      null,
+      [],
+      { ...valid, model: 'unknown' },
+      { ...valid, delta: 1 },
+      { ...valid, routingEvidence: ' ' },
+      { ...valid, surprise: true },
+      { ...valid, handoff: null },
+      { ...valid, tools: ['read', 'read'] },
+      {
+        ...valid,
+        handoff: { ...f.task.handoff, sources: [{ ref: 'api.ts', status: 'candidate' }] },
+      },
+      { tasks: JSON.stringify([valid, valid]) },
+      { tasks: [null, valid] },
+      { ...valid, tasks: [] },
+    ]) {
+      await expect(f.invoke('aorchestra_delegate', input)).rejects.toThrow();
+      expect(await ledger.read('primary')).toEqual(before);
+    }
+    expect(f.creations).toHaveLength(0);
+  } finally {
+    await f.clean();
+  }
+});
+
+test('malformed group handoff rejects every member atomically with unchanged provenance and budgets', async () => {
+  const f = await fixture({ maxConcurrentAnalyses: 2, maxDelegations: 2, maxAttempts: 1 });
+  try {
+    const analysis = { ...f.task, kind: 'analysis', analysisMode: 'lookup', writePaths: [] };
+    for (const id of ['first', 'second'])
+      await f.invoke('aorchestra_task', { operation: 'register', task: { ...analysis, id } });
+    const before = await new Ledger(f.ctx.storage).read('primary');
+    await expect(
+      f.invoke('aorchestra_delegate', {
+        tasks: ['first', 'second'].map((taskId) => ({
+          taskId,
+          model: 'fast',
+          tools: ['read'],
+          routingEvidence: 'Independent lookup',
+          ...(taskId === 'second' ? { handoff: JSON.stringify(f.task.handoff) } : {}),
+        })),
+      }),
+    ).rejects.toThrow('HANDOFF_OBJECT_REQUIRED');
+    expect(await new Ledger(f.ctx.storage).read('primary')).toEqual(before);
+    expect(f.creations).toHaveLength(0);
+  } finally {
+    await f.clean();
+  }
+});
+
+test('registration rejects an explicitly malformed handoff without saving a task', async () => {
+  const f = await fixture();
+  try {
+    for (const handoff of [null, false, JSON.stringify(f.task.handoff)]) {
+      await expect(
+        f.invoke('aorchestra_task', {
+          operation: 'register',
+          task: { ...f.task, handoff },
+        }),
+      ).rejects.toThrow('HANDOFF_OBJECT_REQUIRED');
+      expect((await new Ledger(f.ctx.storage).read('primary')).tasks).toHaveLength(0);
+    }
+  } finally {
+    await f.clean();
+  }
+});
+
+test('delegation schema communicates structured arguments and executable example', async () => {
+  const f = await fixture();
+  try {
+    const tool = f.tools.get('aorchestra_delegate');
+    const schema = tool.input.oneOf[0];
+    expect(schema.properties.tools.type).toBe('array');
+    expect(schema.properties.tools.description).toContain('JSON array');
+    expect(schema.properties.handoff.type).toBe('object');
+    expect(schema.properties.handoff.description).toContain('JSON object');
+    expect(schema.properties.tools.uniqueItems).toBe(true);
+    expect(schema.required).toEqual(['taskId', 'model', 'tools', 'routingEvidence']);
+    expect(tool.description).toContain('"tools":["read"]');
+    expect(tool.description).toContain(
+      'reuse its instruction, context, scope, verifiers and handoff',
+    );
+    expect(tool.description).toContain('Results remain unaccepted');
+  } finally {
+    await f.clean();
+  }
+});
+
 test('legacy tasks require a handoff before spending budget; supplying it sends provenance to the child', async () => {
   const f = await fixture();
   try {
@@ -750,8 +946,8 @@ test('legacy tasks require a handoff before spending budget; supplying it sends 
   }
 });
 
-test('fast-to-strong retry propagates the reason and remains capped at two native children', async () => {
-  const f = await fixture();
+test('fast-to-strong retry respects an explicit two-child budget', async () => {
+  const f = await fixture({ maxAttempts: 2 });
   try {
     await f.register();
     const call = { taskId: 'api', tools: ['read'], routingEvidence: 'Known consumer and pattern' };
@@ -944,7 +1140,7 @@ test('Build context interrupts outstanding children and blocks stale primary wor
       await f.hooks.get('session:context')!({
         agent: 'build',
         sessionID: 'primary',
-        tools: {},
+        tools: { read: {} },
         options: {},
       });
       await expect(
@@ -1578,6 +1774,24 @@ test('group analyses overlap at capacity, retain individual review and accept wh
     const group = f.invoke('aorchestra_delegate', { tasks: ['a', 'b', 'c'].map(delegateItem) });
     await entered;
     expect(f.prompts).toHaveLength(3);
+    const sourceSnapshot = fingerprint(await snapshot(f.root));
+    for (const prompt of f.prompts) {
+      expect(prompt.text).toContain(
+        `SOURCE SNAPSHOT AT DELEGATION (not a Git revision)\n${sourceSnapshot}`,
+      );
+      expect(prompt.text).toContain(JSON.stringify(f.task.handoff));
+      expect(prompt.text).toContain(
+        'Return STATUS, RESULT, EVIDENCE, CHANGED, OPEN exactly once as FIELD: value lines.',
+      );
+      expect(prompt.text).toContain('STATUS: COMPLETE, PARTIAL or BLOCKED');
+      expect(prompt.text).toContain(
+        'COMPLETE requires evidence for the entire supplied outcome and OPEN: none',
+      );
+      expect(prompt.text).toContain(
+        'unavailable primary validation remains OPEN and means PARTIAL',
+      );
+      expect(prompt.text).toContain('Your report does not accept the task');
+    }
     const ledger = new Ledger(f.ctx.storage);
     expect((await ledger.read('primary')).tasks.map((t) => t.status)).toEqual([
       'running',
@@ -1652,7 +1866,7 @@ test('group admission rejects every invalid member atomically without children o
         ? { maxDelegations: 1, maxConcurrentAnalyses: 3 }
         : scenario === 'capacity'
           ? { maxConcurrentAnalyses: 1 }
-          : { maxConcurrentAnalyses: 3 },
+          : { maxConcurrentAnalyses: 3, maxAttempts: 2 },
     );
     try {
       await registerAnalyses(f, ['a', 'b']);
@@ -2162,7 +2376,7 @@ test('status exposes measured and unknown budgets; primary and executor receive 
       const context = {
         agent,
         sessionID: agent === 'aorchestra' ? 'primary' : 'child-1',
-        tools: {},
+        tools: { read: {} },
         options: {},
         system: [] as any[],
         model: { providerID: 'test', id: 'model' },
@@ -2269,7 +2483,7 @@ test('historical usage never blocks dispatch by default or with a null limit', a
         const context = {
           agent: 'aorchestra',
           sessionID: 'primary',
-          tools: {},
+          tools: { read: {} },
           options: {},
           system: [] as any[],
           model: { providerID: 'test', id: 'model' },
@@ -2423,16 +2637,12 @@ test('large JSON tool evidence leaves native truncation and cumulative dispatch 
       const context = {
         agent: 'aorchestra',
         sessionID: 'primary',
-        tools: {},
+        tools: { read: {} },
         options: {},
         system: [],
         model: { providerID: 'test', id: 'model' },
       };
-      if (options.maxSessionTokens === 300000)
-        await expect(f.hooks.get('session:context')!(context)).rejects.toThrow(
-          'SESSION_TOKEN_BUDGET_EXCEEDED',
-        );
-      else await f.hooks.get('session:context')!(context);
+      await f.hooks.get('session:context')!(context);
       f.ctx.session.get = async (input) => ({ ...(await get(input)), tokens: {} as any });
       expect(
         JSON.parse((await f.invoke('aorchestra_task', { operation: 'status' })).content).tokenBudget
@@ -2442,4 +2652,754 @@ test('large JSON tool evidence leaves native truncation and cumulative dispatch 
       await f.clean();
     }
   }
+});
+
+test('default and null operation budgets continue past old thresholds without losing compaction state', async () => {
+  for (const options of [{}, { maxDelegations: null, maxAttempts: null, maxRepairs: null }]) {
+    const f = await fixture(options);
+    try {
+      await f.register();
+      for (let attempt = 0; attempt < 10; attempt++) {
+        await f.invoke('aorchestra_delegate', {
+          taskId: 'api',
+          model: 'balanced',
+          tools: ['read'],
+          routingEvidence: 'Inspect the observed regression',
+          delta: attempt ? 'Previous verification failed; inspect retained evidence' : '',
+        });
+        await f.verify(1);
+        await f.invoke('aorchestra_task', {
+          operation: 'repair',
+          taskId: 'api',
+          reason: 'Address the observed failing regression',
+        });
+      }
+      const ledger = new Ledger(f.ctx.storage);
+      const before = await ledger.read('primary');
+      expect(before.delegations).toBe(10);
+      expect(before.tasks[0].attempts).toHaveLength(10);
+      expect(before.tasks[0].workflow!.repairs).toBe(10);
+      const system: any[] = [];
+      await f.hooks.get('session:compaction')!({
+        agent: 'aorchestra',
+        sessionID: 'primary',
+        system,
+      });
+      const summary = JSON.parse(system[0].text.split('\n')[1]);
+      expect(summary.tasks[0]).toMatchObject({ id: 'api', repairs: 10, phase: 'repair' });
+      expect(summary.tasks[0].workflow).toBeUndefined();
+      expect(summary.tasks[0].verification).toBeUndefined();
+      expect(await ledger.read('primary')).toEqual(before);
+      await f.verify();
+      await f.accept();
+    } finally {
+      await f.clean();
+    }
+  }
+});
+
+test('explicit operation limits reject invalid values and preserve attempt exhaustion', async () => {
+  for (const name of ['maxDelegations', 'maxAttempts', 'maxRepairs']) {
+    for (const value of [0, -1, 1.5, '2', false]) {
+      await expect(fixture({ [name]: value })).rejects.toThrow(`INVALID_OPTION: ${name}`);
+    }
+  }
+  const f = await fixture({ maxAttempts: 1 });
+  try {
+    await f.register();
+    const input = {
+      taskId: 'api',
+      model: 'balanced',
+      tools: ['read'],
+      routingEvidence: 'Inspect API',
+    };
+    await f.invoke('aorchestra_delegate', input);
+    await f.verify(1);
+    await f.invoke('aorchestra_task', {
+      operation: 'repair',
+      taskId: 'api',
+      reason: 'Observed failure',
+    });
+    await expect(
+      f.invoke('aorchestra_delegate', { ...input, delta: 'New failure evidence' }),
+    ).rejects.toThrow('BUDGET_EXCEEDED');
+    expect((await new Ledger(f.ctx.storage).read('primary')).delegations).toBe(1);
+  } finally {
+    await f.clean();
+  }
+});
+
+test('legacy 300k token setting allows 402965 tokens after restart for primary and executor', async () => {
+  const f = await fixture({ maxSessionTokens: 300000 });
+  let restarted: Awaited<ReturnType<typeof plugin.setup>> = undefined;
+  try {
+    await f.register();
+    await f.invoke('aorchestra_delegate', {
+      taskId: 'api',
+      model: 'balanced',
+      tools: ['read'],
+      routingEvidence: 'Inspect API',
+    });
+    const saved = (await f.ctx.storage.get('child/child-1')) as Record<string, unknown>;
+    await f.ctx.storage.set('child/child-1', { ...saved, active: true });
+    const get = f.ctx.session.get;
+    f.ctx.session.get = async (input) => ({
+      ...(await get(input)),
+      tokens: { input: 402965, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+    });
+    restarted = await plugin.setup(f.ctx);
+    for (const [agent, sessionID] of [
+      ['aorchestra', 'primary'],
+      ['aorchestra-executor', 'child-1'],
+    ]) {
+      const system: any[] = [];
+      await f.hooks.get('session:compaction')!({ agent, sessionID, system });
+      await f.hooks.get('session:context')!({
+        agent,
+        sessionID,
+        tools: { read: {} },
+        options: {},
+        system,
+        model: { providerID: 'test', id: 'model' },
+      });
+      expect(system.some((item) => item.text.includes('does not block dispatch'))).toBe(true);
+    }
+    const status = JSON.parse((await f.invoke('aorchestra_task', { operation: 'status' })).content);
+    expect(status.tokenBudget).toMatchObject({
+      limit: 300000,
+      consumed: 402965,
+      remaining: 0,
+      nearLimit: true,
+    });
+  } finally {
+    if (restarted) await restarted();
+    await f.clean();
+  }
+});
+
+test('unavailable models and variants fail before atomic reservation or child creation', async () => {
+  for (const model of ['missing/model', 'github-copilot/gpt-5.6-luna#missing']) {
+    const f = await fixture({ models: { fast: model } });
+    try {
+      await f.register();
+      await expect(
+        f.invoke('aorchestra_delegate', {
+          taskId: 'api',
+          model: 'fast',
+          tools: ['read'],
+          routingEvidence: 'Inspect API',
+        }),
+      ).rejects.toThrow(/MODEL_(UNAVAILABLE|VARIANT_UNAVAILABLE)/);
+      expect(f.creations).toHaveLength(0);
+      expect((await new Ledger(f.ctx.storage).read('primary')).delegations).toBe(0);
+    } finally {
+      await f.clean();
+    }
+  }
+});
+
+test('native grep cannot deliver sensitive matches or search an explicit sensitive path', async () => {
+  const f = await fixture();
+  try {
+    await f.register();
+    let release!: () => void;
+    f.ctx.session.wait = async () =>
+      new Promise<void>((resolve) => {
+        release = resolve;
+      });
+    const running = f.invoke('aorchestra_delegate', {
+      taskId: 'api',
+      model: 'fast',
+      tools: ['grep'],
+      routingEvidence: 'Locate API consumers',
+    });
+    while (!release) await Bun.sleep(1);
+    const event = {
+      agent: 'aorchestra-executor',
+      sessionID: 'child-1',
+      id: 'sensitive-search',
+      tool: 'grep',
+      input: { pattern: 'AUDIT_MARKER', path: '.' },
+      status: 'completed',
+      result: {
+        output: [{ entry: { path: '.env' }, line: 1, text: 'AUDIT_MARKER' }],
+        content: 'AUDIT_MARKER',
+      },
+    };
+    try {
+      await expect(
+        f.hooks.get('tool:execute.before')!({
+          ...event,
+          input: { pattern: 'AUDIT_MARKER', path: '.env' },
+        }),
+      ).rejects.toThrow('PATH_OUTSIDE_SCOPE_OR_SENSITIVE');
+      f.searchMatches.push(...event.result.output);
+      await expect(
+        f.tools.get('grep').execute(event.input, { agent: event.agent }),
+      ).rejects.toThrow('WORKER_SEARCH_RESULT_DENIED');
+    } finally {
+      release();
+      await running;
+    }
+  } finally {
+    await f.clean();
+  }
+});
+
+test('worker tools only callable through Code Mode are rejected before reservation', async () => {
+  const f = await fixture();
+  try {
+    (f.ctx.tool as any).list = async () => [{ id: 'custom_lookup', options: { codemode: true } }];
+    await f.register();
+    await expect(
+      f.invoke('aorchestra_delegate', {
+        taskId: 'api',
+        model: 'fast',
+        tools: ['custom_lookup'],
+        routingEvidence: 'Bounded lookup',
+      }),
+    ).rejects.toThrow('WORKER_CODEMODE_TOOL_DENIED');
+    expect(f.creations).toHaveLength(0);
+    expect((await new Ledger(f.ctx.storage).read('primary')).delegations).toBe(0);
+  } finally {
+    await f.clean();
+  }
+});
+
+test('unknown runtime outcome and cancellation after wait cannot produce a worker review', async () => {
+  for (const mode of ['unknown', 'cancelled']) {
+    const f = await fixture();
+    const controller = new AbortController();
+    try {
+      await f.register();
+      const get = f.ctx.session.get;
+      f.ctx.session.get = async (input) => ({
+        ...(await get(input)),
+        ...(input.sessionID !== 'primary' && mode === 'unknown' ? { outcome: undefined } : {}),
+      });
+      const context = f.ctx.session.context;
+      f.ctx.session.context = async (input, request) => {
+        if (mode === 'cancelled') controller.abort(new Error('AUDIT_CANCELLED'));
+        return context(input, request);
+      };
+      await expect(
+        f.tools.get('aorchestra_delegate').execute(
+          {
+            taskId: 'api',
+            model: 'fast',
+            tools: ['read'],
+            routingEvidence: 'Inspect API',
+          },
+          {
+            sessionID: 'primary',
+            agent: 'aorchestra',
+            signal: controller.signal,
+            progress: async () => {},
+          },
+        ),
+      ).rejects.toThrow(mode === 'unknown' ? 'RUNTIME_UNVERIFIED_OUTCOME' : 'AUDIT_CANCELLED');
+      expect((await new Ledger(f.ctx.storage).read('primary')).tasks[0].status).toBe('blocked');
+      expect(f.data.get('child/child-1')).toMatchObject({ active: false });
+    } finally {
+      await f.clean();
+    }
+  }
+});
+
+test('a registered tool removed from native child context fails explicitly before generation', async () => {
+  const f = await fixture();
+  try {
+    await f.register();
+    let release!: () => void;
+    f.ctx.session.wait = async () =>
+      new Promise<void>((resolve) => {
+        release = resolve;
+      });
+    const running = f.invoke('aorchestra_delegate', {
+      taskId: 'api',
+      model: 'fast',
+      tools: ['read'],
+      routingEvidence: 'Inspect API',
+    });
+    while (!release) await Bun.sleep(1);
+    try {
+      await expect(
+        f.hooks.get('session:context')!({
+          agent: 'aorchestra-executor',
+          sessionID: 'child-1',
+          tools: {},
+          options: {},
+          system: [],
+          model: { providerID: 'github-copilot', id: 'gpt-5.6-luna' },
+        }),
+      ).rejects.toThrow('WORKER_TOOLS_INEFFECTIVE');
+    } finally {
+      release();
+      await running;
+    }
+  } finally {
+    await f.clean();
+  }
+});
+
+test('oversized composed instructions fail before child creation rather than truncating constraints', async () => {
+  const f = await fixture();
+  try {
+    await f.invoke('aorchestra_task', {
+      operation: 'register',
+      task: { ...f.task, preserve: ['x'.repeat(50000)] },
+    });
+    await expect(
+      f.invoke('aorchestra_delegate', {
+        taskId: 'api',
+        model: 'fast',
+        tools: ['read'],
+        routingEvidence: 'Inspect API',
+      }),
+    ).rejects.toThrow('DELEGATION_PROMPT_TOO_LARGE');
+    expect(f.creations).toHaveLength(0);
+    expect((await new Ledger(f.ctx.storage).read('primary')).delegations).toBe(0);
+  } finally {
+    await f.clean();
+  }
+});
+
+test('model configuration is explicit and native variant and tool capability constraints are preserved', async () => {
+  for (const models of [
+    null,
+    [],
+    'provider/model',
+    { fast: null },
+    { unknown: 'provider/model' },
+    { fast: 'invalid' },
+  ])
+    await expect(fixture({ models })).rejects.toThrow();
+  const f = await fixture({ models: { fast: 'github-copilot/gpt-5.6-luna#careful' } });
+  try {
+    (f.ctx.model as any).list = async () => ({
+      data: [
+        {
+          providerID: 'github-copilot',
+          id: 'gpt-5.6-luna',
+          capabilities: { tools: false },
+          variants: [{ id: 'careful' }],
+        },
+      ],
+    });
+    await f.register();
+    const call = {
+      taskId: 'api',
+      model: 'fast',
+      tools: ['read'],
+      routingEvidence: 'Known-file extraction',
+    };
+    await expect(f.invoke('aorchestra_delegate', call)).rejects.toThrow('MODEL_TOOLS_UNSUPPORTED');
+    expect(f.creations).toHaveLength(0);
+    (f.ctx.model as any).list = async () => ({
+      data: [
+        {
+          providerID: 'github-copilot',
+          id: 'gpt-5.6-luna',
+          capabilities: { tools: true },
+          variants: [{ id: 'careful' }],
+        },
+      ],
+    });
+    await f.invoke('aorchestra_delegate', call);
+    expect(f.creations[0].model).toEqual({
+      providerID: 'github-copilot',
+      id: 'gpt-5.6-luna',
+      variant: 'careful',
+    });
+  } finally {
+    await f.clean();
+  }
+});
+
+test('brownfield context handoffs preserve consumers, project constraints, unknowns and retry provenance', async () => {
+  const cases = [
+    {
+      id: 'localized',
+      refs: ['api.ts', 'api.test.ts'],
+      fact: 'Nearby regression characterizes the null input.',
+      unknown: 'Test not run.',
+    },
+    {
+      id: 'cross-module',
+      refs: ['api.ts', 'consumer.ts'],
+      fact: 'Consumer requires the existing exported signature.',
+      unknown: 'Other callers not inspected.',
+    },
+    {
+      id: 'legacy',
+      refs: ['api.ts'],
+      fact: 'Observed implementation retains the legacy export.',
+      unknown: 'Undocumented conventions need investigation.',
+    },
+    {
+      id: 'monorepo',
+      refs: ['packages/api/index.ts', 'packages/client/index.ts'],
+      fact: 'Client imports the public API across package boundaries.',
+      unknown: 'Downstream build not run.',
+    },
+    {
+      id: 'project-instructions',
+      refs: ['AGENTS.md', 'api.ts'],
+      fact: 'Project requires preserving public exports.',
+      unknown: 'Nested instruction file may apply.',
+    },
+    {
+      id: 'large-context',
+      refs: ['api.ts'],
+      fact: 'Line pagination is required for full source inspection.',
+      unknown: 'Only the first source page was observed.',
+    },
+    {
+      id: 'missing-stale',
+      refs: ['deleted.ts'],
+      fact: 'Reference describes an earlier revision.',
+      unknown: 'Current file is missing; rediscover it.',
+    },
+    {
+      id: 'conflicting',
+      refs: ['api.ts', 'consumer.ts'],
+      fact: 'Two supplied references disagree on the input contract.',
+      unknown: 'Resolve the contradiction in current code.',
+    },
+    {
+      id: 'read-only',
+      refs: ['api.ts'],
+      fact: 'Investigation only; source edits are excluded.',
+      unknown: 'Need references for all callers.',
+    },
+  ];
+  for (const scenario of cases) {
+    const f = await fixture();
+    try {
+      const context =
+        scenario.id === 'large-context'
+          ? 'x'.repeat(18000)
+          : 'Inspect only the named sources and consumers.';
+      const handoff: Handoff = {
+        sources: scenario.refs.map((ref) => ({ ref, status: 'candidate', revision: 'unknown' })),
+        facts: [scenario.fact],
+        unknowns: [scenario.unknown],
+        checks: ['Primary regression has not run.'],
+      };
+      await f.invoke('aorchestra_task', {
+        operation: 'register',
+        task: {
+          ...f.task,
+          kind: 'analysis',
+          writePaths: [],
+          analysisMode: 'synthesis',
+          context,
+          handoff,
+        },
+      });
+      await f.invoke('aorchestra_delegate', {
+        taskId: 'api',
+        model: 'balanced',
+        tools: ['read'],
+        routingEvidence: 'Independent bounded investigation',
+      });
+      const prompt = f.prompts[0].text;
+      expect(prompt).toContain(context);
+      expect(prompt).toContain(JSON.stringify(handoff));
+      expect(prompt).toContain(f.task.instruction);
+      expect(prompt).toContain(f.task.preserve[0]);
+      expect(prompt).toContain('WRITE PATHS\nnone');
+      expect(prompt).toContain('primary runs any shell checks');
+      if (scenario.id === 'missing-stale' || scenario.id === 'conflicting')
+        expect(prompt).toContain(scenario.unknown);
+      await f.invoke('aorchestra_task', {
+        operation: 'repair',
+        taskId: 'api',
+        reason: 'Inspect previously missing consumer',
+      });
+      const refreshed = {
+        ...handoff,
+        facts: ['Earlier child result remains unverified; current source was re-read.'],
+      };
+      await f.invoke('aorchestra_delegate', {
+        taskId: 'api',
+        model: 'balanced',
+        tools: ['read'],
+        routingEvidence: 'Resolve an observed gap',
+        delta: 'Added current consumer reference',
+        handoff: refreshed,
+      });
+      expect(f.prompts[1].text).toContain(JSON.stringify(refreshed));
+      expect(f.prompts[1].text).toContain('RETRY DELTA\nAdded current consumer reference');
+    } finally {
+      await f.clean();
+    }
+  }
+});
+
+test('routing scenario matrix keeps DIRECT optional and enforces bounded delegation admission', async () => {
+  const scenarios = [
+    { id: 'trivial', expected: 'DIRECT', delegate: true },
+    { id: 'single-file-bug', expected: 'DIRECT', delegate: true },
+    { id: 'repository-investigation', expected: 'DELEGATE', analysis: true, delegate: true },
+    { id: 'independent-investigation', expected: 'DELEGATE', analysis: true, delegate: true },
+    { id: 'coupled-edits', expected: 'DIRECT', delegate: true },
+    {
+      id: 'missing-context',
+      expected: 'DIRECT or BLOCKED',
+      delegate: false,
+      error: 'HANDOFF_REQUIRED',
+    },
+    { id: 'ordered-dependencies', expected: 'WAIT', delegate: false, error: 'DEPENDENCY_UNMET' },
+    {
+      id: 'unavailable-model',
+      expected: 'DIRECT or BLOCKED',
+      delegate: false,
+      error: 'MODEL_UNAVAILABLE',
+    },
+    { id: 'failed-worker', expected: 'REPAIR', delegate: false, error: 'RUNTIME_FAILED' },
+    { id: 'complex-description-local-change', expected: 'DIRECT', delegate: true },
+  ];
+  for (const scenario of scenarios) {
+    const f = await fixture(
+      scenario.id === 'unavailable-model' ? { models: { fast: 'missing/model' } } : {},
+    );
+    try {
+      const task = {
+        ...f.task,
+        instruction: `${scenario.id}: preserve the public api export.`,
+        ...(scenario.analysis ? { kind: 'analysis', writePaths: [], analysisMode: 'lookup' } : {}),
+      };
+      if (scenario.id === 'missing-context') delete (task as any).handoff;
+      if (scenario.id === 'ordered-dependencies') {
+        await f.invoke('aorchestra_task', {
+          operation: 'register',
+          task: { ...f.task, id: 'dependency' },
+        });
+        task.dependsOn = ['dependency'];
+      }
+      if (scenario.id === 'failed-worker') {
+        const get = f.ctx.session.get;
+        f.ctx.session.get = async (input) => ({
+          ...(await get(input)),
+          outcome: input.sessionID === 'primary' ? 'succeeded' : 'failed',
+        });
+      }
+      await f.invoke('aorchestra_task', { operation: 'register', task });
+      const call = {
+        taskId: 'api',
+        model: 'fast',
+        tools: ['read'],
+        routingEvidence: `Caller supplied ${scenario.expected}; checking admission only`,
+      };
+      if (scenario.delegate) {
+        const result = await f.invoke('aorchestra_delegate', call);
+        expect(result.metadata.accepted).toBe(false);
+      } else {
+        await expect(f.invoke('aorchestra_delegate', call)).rejects.toThrow(scenario.error);
+        expect(f.creations).toHaveLength(scenario.id === 'failed-worker' ? 1 : 0);
+      }
+      // Expected recommendations are input annotations; this test does not ask
+      // a model to choose DIRECT/DELEGATE or claim that allowed means useful.
+    } finally {
+      await f.clean();
+    }
+  }
+});
+
+test('diagnostic counts rejected delegate invocations before admission and stops continuation', async () => {
+  const f = await fixture({}, true);
+  try {
+    await f.invoke('aorchestra_task', archivedDelegation.registration);
+    await expect(
+      f.invoke('aorchestra_delegate', archivedDelegation.calls[0].input),
+    ).rejects.toThrow('HANDOFF_OBJECT_REQUIRED');
+    const state = await new Ledger(f.ctx.storage).read('primary');
+    await expect(
+      f.invoke('aorchestra_delegate', archivedDelegation.calls[1].input),
+    ).rejects.toThrow('DIAGNOSTIC_INVOCATION_LIMIT');
+    expect(await new Ledger(f.ctx.storage).read('primary')).toEqual(state);
+    expect(state.delegations).toBe(0);
+    expect(f.creations).toHaveLength(0);
+    await expect(
+      f.hooks.get('session:context')!({
+        agent: 'aorchestra',
+        sessionID: 'primary',
+        tools: { read: {} },
+        options: {},
+        system: [],
+      }),
+    ).rejects.toThrow('DIAGNOSTIC_HALTED');
+  } finally {
+    await f.clean();
+  }
+});
+
+test('diagnostic successful child allows parent continuation but blocks a second execution after reload', async () => {
+  const f = await fixture({}, true);
+  let reloaded: Awaited<ReturnType<typeof plugin.setup>>;
+  try {
+    await f.invoke('aorchestra_task', archivedDelegation.registration);
+    const input = {
+      taskId: archivedDelegation.registration.task.id,
+      model: 'fast',
+      tools: ['read'],
+      routingEvidence: 'Bounded lookup',
+    };
+    const result = await f.invoke('aorchestra_delegate', input);
+    expect(result.metadata).toMatchObject({
+      childSessionID: 'child-1',
+      accepted: false,
+      workerStatus: 'PARTIAL',
+    });
+    expect(f.creations).toHaveLength(1);
+    expect(f.prompts[0].text).toContain('UNTRUSTED SOURCE HANDOFF');
+    expect(f.prompts[0].text).toContain('TOOLS\nread');
+    await f.hooks.get('session:context')!({
+      agent: 'aorchestra',
+      sessionID: 'primary',
+      model: { providerID: 'github-copilot', id: 'gpt-5.6-terra' },
+      tools: { read: {} },
+      options: {},
+      system: [],
+    });
+    reloaded = await plugin.setup(proofContext(f.ctx));
+    await expect(f.invoke('aorchestra_delegate', input)).rejects.toThrow(
+      'DIAGNOSTIC_INVOCATION_LIMIT',
+    );
+    expect(f.creations).toHaveLength(1);
+    const retry = {
+      agent: 'aorchestra',
+      sessionID: 'primary',
+      decision: { retry: true },
+      error: 'provider failed',
+    };
+    await expect(f.hooks.get('session:retry')!(retry)).rejects.toThrow('DIAGNOSTIC_HALTED');
+  } finally {
+    if (reloaded!) await reloaded();
+    await f.clean();
+  }
+});
+
+test('diagnostic simultaneous invalid calls admit only one callback and prohibit groups and repairs', async () => {
+  const f = await fixture({}, true);
+  try {
+    await f.invoke('aorchestra_task', archivedDelegation.registration);
+    const outcomes = await Promise.allSettled([
+      f.invoke('aorchestra_delegate', archivedDelegation.calls[0].input),
+      f.invoke('aorchestra_delegate', archivedDelegation.calls[1].input),
+    ]);
+    const errors = outcomes.map((result) =>
+      result.status === 'rejected' ? String(result.reason) : 'unexpected-success',
+    );
+    expect(errors.filter((error) => error.includes('HANDOFF_OBJECT_REQUIRED'))).toHaveLength(1);
+    expect(errors.filter((error) => error.includes('DIAGNOSTIC_INVOCATION_LIMIT'))).toHaveLength(1);
+    expect(f.creations).toHaveLength(0);
+    await expect(
+      f.invoke('aorchestra_task', {
+        operation: 'repair',
+        taskId: 'config-zero-lookup',
+        repairReason: 'try again',
+      }),
+    ).rejects.toThrow('DIAGNOSTIC_REPAIR_FORBIDDEN');
+  } finally {
+    await f.clean();
+  }
+  const group = await fixture({}, true);
+  try {
+    await expect(group.invoke('aorchestra_delegate', { tasks: [{}, {}] })).rejects.toThrow(
+      'DIAGNOSTIC_SINGLE_TASK_REQUIRED',
+    );
+    expect(group.creations).toHaveLength(0);
+  } finally {
+    await group.clean();
+  }
+});
+
+test('diagnostic disables native provider retries and replacement lookups', async () => {
+  const f = await fixture({}, true);
+  try {
+    await f.invoke('aorchestra_task', archivedDelegation.registration);
+    await expect(
+      f.invoke('aorchestra_task', {
+        ...archivedDelegation.registration,
+        task: { ...archivedDelegation.registration.task, id: 'replacement' },
+      }),
+    ).rejects.toThrow('DIAGNOSTIC_LOOKUP_REQUIRED');
+  } finally {
+    await f.clean();
+  }
+  const retry = await fixture({}, true);
+  try {
+    const event = {
+      agent: 'aorchestra',
+      sessionID: 'primary',
+      decision: { retry: true },
+      error: 'provider failed',
+    };
+    await retry.hooks.get('session:retry')!(event);
+    expect(event.decision.retry).toBe(false);
+    await expect(
+      retry.hooks.get('session:context')!({
+        agent: 'aorchestra',
+        sessionID: 'primary',
+        tools: { read: {} },
+        options: {},
+        system: [],
+      }),
+    ).rejects.toThrow('DIAGNOSTIC_HALTED');
+  } finally {
+    await retry.clean();
+  }
+});
+
+test('diagnostic HTTP budget counts sends independently and rejects auxiliary inference', async () => {
+  const f = await fixture({}, true);
+  try {
+    const budget = requestBudget(f.ctx);
+    for (let step = 0; step < 20; step++)
+      await budget({ agent: 'aorchestra', kind: 'primary', sessionID: 'primary' });
+    await expect(
+      budget({ agent: 'aorchestra', kind: 'primary', sessionID: 'primary' }),
+    ).rejects.toThrow('DIAGNOSTIC_PROVIDER_REQUEST_LIMIT');
+    const restarted = requestBudget(f.ctx);
+    await expect(
+      restarted({ agent: 'aorchestra', kind: 'primary', sessionID: 'primary' }),
+    ).rejects.toThrow('DIAGNOSTIC_PROVIDER_REQUEST_LIMIT');
+    for (let step = 0; step < 8; step++)
+      await budget({ agent: 'aorchestra-executor', kind: 'primary', sessionID: 'child' });
+    await expect(
+      budget({ agent: 'aorchestra-executor', kind: 'primary', sessionID: 'child' }),
+    ).rejects.toThrow('DIAGNOSTIC_PROVIDER_REQUEST_LIMIT');
+    await expect(budget({ agent: 'title', kind: 'title', sessionID: 'primary' })).rejects.toThrow(
+      'DIAGNOSTIC_PROVIDER_REQUEST_LIMIT',
+    );
+  } finally {
+    await f.clean();
+  }
+});
+
+test('diagnostic preflight rejects discovered step limits or missing native wrapper', () => {
+  const valid = {
+    available: true,
+    tools: true,
+    behavior: false,
+    regression: true,
+    agents: [
+      { id: 'aorchestra', steps: 20 },
+      { id: 'aorchestra-executor', steps: 8 },
+    ],
+    wrapperActive: true,
+  };
+  expect(readyForProof(valid)).toBe(true);
+  expect(
+    readyForProof({
+      ...valid,
+      agents: [
+        { id: 'aorchestra', steps: 30 },
+        { id: 'aorchestra-executor', steps: 24 },
+      ],
+    }),
+  ).toBe(false);
+  expect(readyForProof({ ...valid, wrapperActive: false })).toBe(false);
 });

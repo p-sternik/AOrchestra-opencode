@@ -1,0 +1,227 @@
+[
+  {
+    "action": "*",
+    "resource": "*",
+    "effect": "ask"
+  },
+  {
+    "action": "read",
+    "resource": "*",
+    "effect": "allow"
+  },
+  {
+    "action": "grep",
+    "resource": "*",
+    "effect": "allow"
+  },
+  {
+    "action": "glob",
+    "resource": "*",
+    "effect": "allow"
+  },
+  {
+    "action": "edit",
+    "resource": "*",
+    "effect": "allow"
+  },
+  {
+    "action": "webfetch",
+    "resource": "*",
+    "effect": "allow"
+  },
+  {
+    "action": "websearch",
+    "resource": "*",
+    "effect": "allow"
+  },
+  {
+    "action": "question",
+    "resource": "*",
+    "effect": "allow"
+  },
+  {
+    "action": "skill",
+    "resource": "*",
+    "effect": "deny"
+  },
+  {
+    "action": "skill",
+    "resource": "aorchestra-repo-context",
+    "effect": "allow"
+  },
+  {
+    "action": "skill",
+    "resource": "aorchestra-improve",
+    "effect": "allow"
+  },
+  {
+    "action": "aorchestra_task",
+    "resource": "*",
+    "effect": "allow"
+  },
+  {
+    "action": "aorchestra_delegate",
+    "resource": "*",
+    "effect": "allow"
+  },
+  {
+    "action": "subagent",
+    "resource": "*",
+    "effect": "deny"
+  },
+  {
+    "action": "read",
+    "resource": "*.env*",
+    "effect": "ask"
+  },
+  {
+    "action": "read",
+    "resource": "*.key",
+    "effect": "deny"
+  },
+  {
+    "action": "read",
+    "resource": "*.pem",
+    "effect": "deny"
+  },
+  {
+    "action": "edit",
+    "resource": ".opencode/*",
+    "effect": "ask"
+  },
+  {
+    "action": "shell",
+    "resource": "*",
+    "effect": "ask"
+  },
+  {
+    "action": "shell",
+    "resource": "npm run typecheck",
+    "effect": "allow"
+  },
+  {
+    "action": "shell",
+    "resource": "npm run lint",
+    "effect": "allow"
+  },
+  {
+    "action": "shell",
+    "resource": "npm run test",
+    "effect": "allow"
+  },
+  {
+    "action": "shell",
+    "resource": "pnpm run typecheck",
+    "effect": "allow"
+  },
+  {
+    "action": "shell",
+    "resource": "pnpm run lint",
+    "effect": "allow"
+  },
+  {
+    "action": "shell",
+    "resource": "pnpm run test",
+    "effect": "allow"
+  },
+  {
+    "action": "shell",
+    "resource": "yarn run typecheck",
+    "effect": "allow"
+  },
+  {
+    "action": "shell",
+    "resource": "yarn run lint",
+    "effect": "allow"
+  },
+  {
+    "action": "shell",
+    "resource": "yarn run test",
+    "effect": "allow"
+  },
+  {
+    "action": "shell",
+    "resource": "bun run typecheck",
+    "effect": "allow"
+  },
+  {
+    "action": "shell",
+    "resource": "bun run lint",
+    "effect": "allow"
+  },
+  {
+    "action": "shell",
+    "resource": "bun run test",
+    "effect": "allow"
+  },
+  {
+    "action": "shell",
+    "resource": "bun test",
+    "effect": "allow"
+  },
+  {
+    "action": "shell",
+    "resource": "bun test *",
+    "effect": "allow"
+  },
+  {
+    "action": "shell",
+    "resource": "git status",
+    "effect": "allow"
+  },
+  {
+    "action": "shell",
+    "resource": "git status *",
+    "effect": "allow"
+  },
+  {
+    "action": "shell",
+    "resource": "git diff",
+    "effect": "allow"
+  },
+  {
+    "action": "shell",
+    "resource": "git diff *",
+    "effect": "allow"
+  },
+  {
+    "action": "shell",
+    "resource": "git log",
+    "effect": "allow"
+  },
+  {
+    "action": "shell",
+    "resource": "git log *",
+    "effect": "allow"
+  },
+  {
+    "action": "shell",
+    "resource": "git show",
+    "effect": "allow"
+  },
+  {
+    "action": "shell",
+    "resource": "git show *",
+    "effect": "allow"
+  },
+  {
+    "action": "shell",
+    "resource": "git rev-parse",
+    "effect": "allow"
+  },
+  {
+    "action": "shell",
+    "resource": "git rev-parse *",
+    "effect": "allow"
+  },
+  {
+    "action": "shell",
+    "resource": "git push *",
+    "effect": "deny"
+  },
+  {
+    "action": "external_directory",
+    "resource": "*",
+    "effect": "ask"
+  }
+]

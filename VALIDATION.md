@@ -748,3 +748,191 @@ so intentionally skipped ancestors do not impose an implicit success condition.
 All **13 release tests** (149 assertions), typecheck and actionlint passed locally.
 The expression tests exercise skipped-ancestor status but do not run GitHub's
 scheduler; live continuation and tag-retry confirmation remain outstanding.
+
+## Optional operation budgets and compacted task state
+
+Deterministic plugin regressions exercise ten delegations, attempts and failed-check
+repair cycles under both omitted and null operation limits, followed by successful
+verification and acceptance. Explicit numeric limits retain rejection semantics.
+The compaction hook preserves counters and pending repair state without inserting
+full workflow events or verification plans, and does not mutate the durable ledger.
+These checks do not establish provider-backed compaction quality or unlimited
+workflow effectiveness. Native automatic compaction remains owned by OpenCode.
+
+## Advisory session usage thresholds
+
+The session context hook no longer throws `SESSION_TOKEN_BUDGET_EXCEEDED`. Legacy
+numeric `maxSessionTokens` values remain readable as advisory status thresholds.
+Controlled primary/executor regressions verify warnings and continued dispatch at
+and above the threshold, including 402,965 tokens against a 300,000 threshold.
+This supersedes the historical explicit-limit rejection behavior documented above.
+Missing counters remain unknown. Context capacity and automatic compaction remain
+owned by OpenCode; these regressions do not prove provider-backed compaction quality.
+
+## Core orchestration audit, 2026-10-14
+
+The [core audit](docs/core-orchestration-audit.md) records the source revisions,
+comparison, ten routing scenarios, context-delivery cases, six reproduced defects,
+corrections and remaining execution gaps. The starting uncommitted permission,
+setup and budget changes were preserved and are included in these check results.
+
+Final local checks passed: **216 Bun tests, 1,580 assertions**, **29 Python tests**,
+`bun run typecheck`, `bun run format:check`, `bun run eval:check`,
+`bun scripts/version-check.ts` and `npm run pack:check`. Corpus checking covered
+nine development cases out of thirteen total cases and invoked no models. The
+package check verified 50 assets, production installation, server import, CLI help
+and both packaged TUI modes. Targeted core/plugin checks passed **85 tests**.
+
+`bun run check` passed on **OpenCode 2.0.28** with `modelCalls: 0`. The new
+development-only `bun scripts/core-check.ts` also passed on 2.0.28 in a fresh
+private project/database with zero model calls. It exercised native edit/read
+verification and DIRECT acceptance, persisted child parent/model/permission
+configuration, actual child read/edit/grep operations, and rejection of outside-scope
+edits, sensitive read/search output, shell, nested delegation, inactive contracts
+and unavailable-model admission. Its test-only RPC manually drives harness tool
+callbacks and creates the leaf-test child; it does not request a model-generated
+successful child execution or final primary synthesis. It is not shipped in the
+production package. The fixture uses fake sensitive content.
+
+Controlled regressions reject Code Mode-only worker tools, malformed/unavailable
+model/variant configurations, models without declared tool support, absent effective
+child tools, oversized composed prompts, unknown native outcomes and cancellation
+after wait. Context cases establish preservation of task-specific constraints,
+consumer references, provenance labels and refreshed retry handoffs in the native
+prompt input. They do not establish factual provenance or sufficient context for
+real brownfield/monorepo tasks. The 48,000-character prompt cap does not establish
+provider context-window compatibility. Sensitive-search output rejection does not
+prevent local scanning of sensitive files or provide filesystem isolation.
+
+No provider-backed inference, routing-quality measurement or task-effectiveness
+evaluation ran. Successful native child model requests, provider cancellation,
+model-dependent task decomposition, project-instruction conflict resolution and
+semantic primary continuation remain unverified. This audit inspected 2.0.26 API
+packages and native source, but executed 2.0.28; it does not certify all V2 runtimes.
+
+## Authorized real-model core validation, 2026-10-14
+
+The [real-model report](docs/real-model-core-validation.md) records three explicitly
+authorized, bounded SELECTIVE runs on OpenCode 2.0.28 using an isolated
+`opencode/mimo-v2.6-flash-free` profile. Configured GitHub Copilot models were absent
+from the current native catalog. Repository/global configuration and routing were
+preserved; all six audited executable/test file hashes remained unchanged.
+
+Two autonomous runs chose DIRECT and passed independent behavior, original
+regression, scope and protocol checks: falsy memoization repair and caller/config
+investigation. They created no children. The explicitly instructed delegation
+diagnostic reached the 600-second CLI timeout without task registration or a child.
+It failed behavioral completion, retained passing original regression/scope checks,
+and has incomplete usage and no terminal native session outcome. Its stale telemetry
+`running` state is not evidence that inference continued after process termination.
+No further model calls or fixture reruns were made after the three-run budget.
+
+Before inference, 115 focused core/plugin/evaluation/corpus tests passed (862
+assertions), typecheck and corpus validation passed, and the existing native core
+probe passed with zero model calls, including invalid-contract rejection. The
+successful runs establish observed autonomous DIRECT execution and correctness on
+small fixtures. They do not establish successful model-generated child contracts,
+worker dispatch/tools/context, child-result interpretation, parent continuation,
+multi-model adaptation, large-repository sufficiency or routing superiority. No
+independently reproduced critical core defect justified a production fix.
+
+## Delegation proof preparation and evaluation timeout correction, 2026-10-14
+
+The [follow-up assessment](docs/real-model-core-validation.md#delegation-proof-reconciliation-and-timeout-correction-2026-10-14)
+reconciles the unchanged audit hashes and archived native timing. It prepares one
+forced-delegation diagnostic but makes no new provider calls; full real-model child
+execution and parent continuation remain unverified pending authorization.
+
+The evaluation timeout helper now requests native interruption with SIGINT before
+a five-second SIGKILL fallback. Two Linux executable regressions fail against the
+original helper and pass after correction. The full suite passes with **218 tests,
+1,592 assertions**; typecheck, corpus validation and the post-change native smoke
+pass. Native checks make zero model calls. Provider terminal flushing, Windows
+graceful interruption and process-tree cleanup remain unverified; routing and
+production task contracts were not changed.
+
+## Single authorized delegation diagnostic, 2026-10-14
+
+The [single-run result](docs/real-model-core-validation.md#authorized-single-delegation-diagnostic-2026-10-14)
+is **FAIL**: native delegate arguments supplied tools/handoff as strings despite
+correct array/object schema delivery, causing HANDOFF_SOURCES_INVALID before child
+admission. Seven primary steps and one auxiliary title request ran; no children,
+reserved attempts or repairs occurred. The primary made a second rejected delegate
+call before operator interruption, violating the diagnostic's one-call/no-retry
+protocol. Exactly one CLI run was launched; authorization is exhausted.
+
+Native interruption and terminal telemetry were observed. Original regression and
+scope pass, behavioral output is absent, and usage coverage is incomplete. Raw
+native calls, provider request bodies/schema, response status, workspace and database
+are archived under work/core-delegation-validation. No production routing was
+changed. Complete real-model child M/T/I/C, execution and parent continuation
+remain unverified.
+
+## Delegation tool contract usability, 2026-10-14
+
+The [usability audit](docs/real-model-core-validation.md#delegation-tool-contract-usability-audit-2026-10-14)
+replays both exact archived malformed argument payloads. Explicit array/object
+checks now report TOOLS_ARRAY_REQUIRED and HANDOFF_OBJECT_REQUIRED before child
+creation or reservation; corrected typed input reuses the registered task/handoff.
+Required fields, source shapes, uniqueness, unknown properties and atomic group
+rejection are covered while existing native permission/scope/acceptance checks
+remain passing. No string normalization or routing-policy change was introduced.
+
+Checks: **227 tests passed, 1,685 assertions**, typecheck and corpus validation
+passed. Repository smoke and extended core probe passed on OpenCode 2.0.28 with
+zero model calls, including actual tool schema registration and malformed-payload
+rejection. Native codec conversion fails on the archived taskId pattern and may
+pass raw inputs through; explicit harness validation no longer relies on it.
+Probe hooks are manually driven and successful recovery uses a mocked child.
+No provider inference ran. Real-model argument usability and complete delegation
+execution/continuation remain unverified.
+
+## Delegation foundation preparation, 2026-10-14
+
+[Current reconciliation and proof protocol](docs/real-model-core-validation.md#delegation-foundation-preparation-2026-10-14)
+map the entire existing delegation path to implementation and tests. The final
+verdict is **BLOCKED pending fresh authorization**: no inference ran and actual
+child M/T/I/C, successful execution and parent result consumption remain unverified.
+
+An evaluation-only persisted gate counts rejected delegate calls before admission,
+blocks further calls/context after failure, removes delegation from successful
+parent continuation, denies repairs/provider retries, and bounds HTTP sends at
+20 primary / 8 child with zero auxiliary inference. A minimal existing-fixture
+lookup keeps the answer in runner-owned assertions. Effective native preflight
+confirms the intended wrapper and 20/8-step agents in an external workspace;
+a rejected repository-subtree preparation is retained as evidence.
+
+Current checks: **233 tests PASS, 1,714 assertions**; typecheck/corpus PASS;
+repository smoke, core probe and diagnostic native registration probe PASS on
+OpenCode 2.0.28 with zero model calls. Six added regressions exercise diagnostic
+boundaries; production routing, tuple composition and contract invariants are
+unchanged. Preparation and the exact proposed execution budget are archived in
+`work/delegation-foundation/prepared/prepared-diagnostic.json`.
+
+## Minimal orchestration simplification, 2026-10-14
+
+The [architecture review](docs/core-orchestration-audit.md#minimal-architecture-review-2026-10-14)
+removes repeated model-facing guidance and an unused delegation-entry field,
+and derives one prompt fingerprint from each atomic admission's source snapshot.
+The generated child prompt now owns the complete report format; parser and
+acceptance gates, dynamic M/T/I/C, permissions, SELECTIVE policy and configured
+budgets remain unchanged. Instruction files lose 110 words / 800 characters;
+this measures text reduction, not model token savings or task effectiveness.
+
+Observed checks on the final code: **233 tests PASS, 1,736 assertions**;
+typecheck and existing development/holdout corpus validation PASS. Native smoke,
+core probe and diagnostic registration probe PASS on OpenCode 2.0.28 with
+**modelCalls: 0**. Added assertions preserve group snapshot/provenance delivery,
+full report vocabulary and the boundary between partial reports and acceptance.
+Native callbacks are manually driven; successful child continuation in controlled
+tests uses mocked APIs.
+
+The original prepared proof's source/fixture fingerprints were checked and its
+archive preserved. A refreshed external preparation has effective 20/8-step agents,
+the existing one-invocation gate, valid catalog M/T and a ready no-inference
+preflight. It remains pending fresh explicit authorization. The comparison reuses
+three existing fixtures and the existing runtime with two instruction variants;
+all six proposed observation rows are unrun and INCONCLUSIVE. No provider inference,
+new economics measurement, experimental production routing or isolation claim
+is made. The exact remaining evidence is listed in the
+[foundation reconciliation](docs/real-model-core-validation.md#minimal-architecture-foundation-reconciliation-2026-10-14).

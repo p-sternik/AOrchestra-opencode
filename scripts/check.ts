@@ -244,6 +244,36 @@ try {
       await assertPermission(session.id, [skill.id], 'deny', 'skill');
     }
     await assertPermission(permissionSession.id, ['unrelated-skill'], 'deny', 'skill');
+    for (const skill of BUNDLED_SKILLS) {
+      for (const prefix of [
+        '/global/opencode',
+        '/global/opencode/cache/npm/package@0.9.0/install',
+      ]) {
+        const directory = `${prefix}/node_modules/aorchestra-opencode-v2/skills/${skill.directory}`;
+        await assertPermission(
+          permissionSession.id,
+          [`${directory}/*`],
+          'allow',
+          'external_directory',
+        );
+        await assertPermission(
+          permissionSession.id,
+          [`${directory}/references/*`],
+          'allow',
+          'external_directory',
+        );
+        await assertPermission(session.id, [`${directory}/*`], 'deny', 'external_directory');
+      }
+    }
+    for (const directory of [
+      '/global/opencode/node_modules/*',
+      '/global/opencode/node_modules/another-plugin/skills/improve/*',
+      '/global/opencode/node_modules/aorchestra-opencode-v2/lib/*',
+      '/global/opencode/node_modules/aorchestra-opencode-v2/skills/other/*',
+      '/global/opencode/node_modules/aorchestra-opencode-v2/skills/improve-extra/*',
+      '/outside/project/*',
+    ])
+      await assertPermission(permissionSession.id, [directory], 'ask', 'external_directory');
     if (!globalMode) {
       const protocolSessions: string[] = [];
       try {

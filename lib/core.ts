@@ -110,14 +110,25 @@ const actionForTool: Record<string, string> = {
   opencode: 'execute',
 };
 export function validateTools(task: Task, tools: string[], catalog: ReadonlySet<string>): void {
-  if (new Set(tools).size !== tools.length) throw new Error('DUPLICATE_TOOLS');
+  if (!Array.isArray(tools))
+    throw new Error(
+      'TOOLS_ARRAY_REQUIRED: tools must be a JSON array of native tool IDs, e.g. ["read", "grep"].',
+    );
+  if (tools.length > 100) throw new Error('TOOLS_ITEMS_INVALID: tools allows at most 100 IDs.');
+  for (const [index, tool] of tools.entries())
+    if (typeof tool !== 'string' || !tool.trim())
+      throw new Error(
+        `TOOLS_ITEMS_INVALID: tools[${index}] must be a non-empty native tool ID string.`,
+      );
+  if (new Set(tools).size !== tools.length)
+    throw new Error('DUPLICATE_TOOLS: tools must contain each native tool ID once.');
   for (const tool of tools) {
     if (!catalog.has(tool)) throw new Error(`TOOL_UNAVAILABLE: ${tool}`);
     if (task.kind !== 'change' && !safeReadTools.has(tool))
       throw new Error(`READ_ONLY_TOOL_DENIED: ${tool}`);
     // Workers never get arbitrary host command execution. The primary verifies via native shell.
     if (
-      ['shell', 'bash', 'subagent', 'question', 'skill'].includes(tool) ||
+      ['shell', 'bash', 'execute', 'opencode', 'subagent', 'question', 'skill'].includes(tool) ||
       tool.startsWith('aorchestra_') ||
       tool.startsWith('opencode_')
     )
@@ -313,7 +324,7 @@ export function registerTask(state: State, task: Task): void {
     (task.kind !== 'analysis' || !['lookup', 'synthesis'].includes(task.analysisMode))
   )
     throw new Error('ANALYSIS_MODE_INVALID');
-  if (task.handoff) validateHandoff(task.handoff);
+  if (task.handoff !== undefined) validateHandoff(task.handoff);
   if (
     task.writePaths.some(
       (path) =>
@@ -360,30 +371,49 @@ export function resetVerification(task: Task): void {
   task.verificationEpoch = (task.verificationEpoch ?? 0) + 1;
 }
 export function validateHandoff(handoff: Handoff | undefined): asserts handoff is Handoff {
-  if (!handoff)
+  if (handoff === undefined)
     throw new Error('HANDOFF_REQUIRED: provide source references, facts, unknowns and checks');
+  if (!handoff || typeof handoff !== 'object' || Array.isArray(handoff))
+    throw new Error(
+      'HANDOFF_OBJECT_REQUIRED: handoff must be a JSON object with sources, facts, unknowns and checks arrays. Supply structured values directly, or omit handoff to use the registered task handoff.',
+    );
+  if (Object.keys(handoff).some((key) => !['sources', 'facts', 'unknowns', 'checks'].includes(key)))
+    throw new Error(
+      'HANDOFF_FIELDS_INVALID: handoff accepts only sources, facts, unknowns and checks.',
+    );
   const text = (value: unknown) =>
     typeof value === 'string' && value.trim().length > 0 && value.length <= 1600;
-  if (
-    !Array.isArray(handoff.sources) ||
-    !handoff.sources.length ||
-    handoff.sources.length > 12 ||
-    handoff.sources.some(
-      (source) =>
-        !source ||
-        !text(source.ref) ||
-        !text(source.revision) ||
-        !['observed', 'candidate'].includes(source.status),
-    )
-  )
-    throw new Error('HANDOFF_SOURCES_INVALID');
+  if (!Array.isArray(handoff.sources) || !handoff.sources.length || handoff.sources.length > 12)
+    throw new Error(
+      'HANDOFF_SOURCES_INVALID: handoff.sources must be an array of 1–12 source objects.',
+    );
+  for (const [index, source] of handoff.sources.entries()) {
+    const path = `handoff.sources[${index}]`;
+    if (!source || typeof source !== 'object' || Array.isArray(source))
+      throw new Error(
+        `HANDOFF_SOURCES_INVALID: ${path} must be an object with ref, status and revision.`,
+      );
+    if (Object.keys(source).some((key) => !['ref', 'status', 'revision'].includes(key)))
+      throw new Error(`HANDOFF_SOURCES_INVALID: ${path} accepts only ref, status and revision.`);
+    for (const name of ['ref', 'revision'] as const)
+      if (!text(source[name]))
+        throw new Error(
+          `HANDOFF_SOURCES_INVALID: ${path}.${name} must be a non-empty string of at most 1600 characters; use revision "unknown" when unavailable.`,
+        );
+    if (!['observed', 'candidate'].includes(source.status))
+      throw new Error(`HANDOFF_SOURCES_INVALID: ${path}.status must be observed or candidate.`);
+  }
   for (const name of ['facts', 'unknowns', 'checks'] as const)
     if (
       !Array.isArray(handoff[name]) ||
       handoff[name].length > 20 ||
       handoff[name].some((value) => !text(value))
     )
-      throw new Error('HANDOFF_ITEMS_INVALID');
+      throw new Error(
+        `HANDOFF_ITEMS_INVALID: handoff.${name} must be an array of at most 20 unique non-empty strings, each at most 1600 characters; use [] when there are no entries.`,
+      );
+    else if (new Set(handoff[name]).size !== handoff[name].length)
+      throw new Error(`HANDOFF_ITEMS_INVALID: handoff.${name} must contain unique entries.`);
   if (JSON.stringify(handoff).length > 12000) throw new Error('HANDOFF_TOO_LARGE');
 }
 export function reserve(
