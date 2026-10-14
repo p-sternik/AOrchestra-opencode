@@ -227,7 +227,7 @@ type Context = {
     run_id: number;
     event: { pull_request?: { number: number } };
   };
-  inputs: { publish_tag?: string; ref?: string };
+  inputs: { publish_tag?: string; ref?: string; merged_sha?: string };
   vars: { NPM_PUBLISH_ENABLED: string };
   needs: Record<string, { result: string; outputs: Record<string, string> }>;
 };
@@ -411,6 +411,26 @@ test('generated release skip marker retains explicit SHA validation and its merg
   expect(jobEnabled('merge-release-pr', missing)).toBe(false);
 });
 
+test('ordinary main runs skip evidence preparation but still require full validation', () => {
+  const ctx = context();
+  expect(jobEnabled('prepare-validation', ctx)).toBe(false);
+  ctx.needs['prepare-validation'].result = 'skipped';
+  ctx.needs['prepare-validation'].outputs.reused = '';
+  expect(jobEnabled('validate-main', ctx)).toBe(true);
+  expect(jobEnabled('release', ctx)).toBe(true);
+  for (const result of ['failure', 'cancelled', 'skipped']) {
+    ctx.needs['validate-main'].result = result;
+    expect(jobEnabled('release', ctx)).toBe(false);
+  }
+  ctx.inputs.merged_sha = ctx.github.sha;
+  expect(jobEnabled('prepare-validation', ctx)).toBe(true);
+  for (const result of ['failure', 'cancelled']) {
+    ctx.needs['prepare-validation'].result = result;
+    expect(jobEnabled('validate-main', ctx)).toBe(false);
+  }
+  expect(jobEnabled('validate-main', context(), true)).toBe(false);
+});
+
 test('release accepts skipped main validation only with successful tree evidence', () => {
   const ctx = context();
   ctx.needs['prepare-validation'].outputs.reused = 'true';
@@ -450,25 +470,58 @@ test('publication requires reusable evidence or successful full tag validation',
   const commands = releaseWorkflow.jobs['publish-npm'].steps!.map((step) => step.run);
   expect(commands).not.toContain('bun run typecheck');
   expect(commands).not.toContain('bun run test');
-  expect(commands).toContain('npm run pack:check');
+  expect(commands).not.toContain('npm run pack:check');
+  expect(commands.some((command) => command?.includes('npm ci'))).toBe(false);
+  expect(
+    releaseWorkflow.jobs['publish-npm'].steps!.some((step) =>
+      step.uses?.startsWith('oven-sh/setup-bun@'),
+    ),
+  ).toBe(false);
   expect(releaseWorkflow.jobs['validate-tag'].with!.ref).toContain('outputs.sha');
   expect(validateWorkflow.jobs.receipt.needs).toBe('validate');
 });
 
-test('shared checks run once while platform tests and packaging retain the full matrix', () => {
-  const steps = validateWorkflow.jobs.validate.steps! as Array<{ run?: string; if?: string }>;
-  for (const run of [
+test('two platform lanes cover supported Node floor and publication toolchain', () => {
+  const job = validateWorkflow.jobs.validate as unknown as {
+    strategy: { matrix: { include: Array<Record<string, string>> } };
+    steps: Array<{ name?: string; run?: string; if?: string }>;
+  };
+  expect(job.strategy.matrix.include).toEqual([
+    { os: 'windows-latest', 'node-version': '22' },
+    { os: 'ubuntu-24.04', 'node-version': '24', 'npm-version': '12.2.0' },
+  ]);
+  const shared = job.steps.find((step) => step.name === 'Shared static and release checks')!;
+  expect(shared.if).toBe("matrix.os == 'ubuntu-24.04'");
+  for (const command of [
     'npm run format:check',
+    'bun run typecheck',
     'bun run eval:check',
     "python -m unittest discover -s tests -p '*_test.py'",
     'bun scripts/version-check.ts',
-  ]) {
-    expect(steps.find((step) => step.run === run)?.if).toBe(
-      "matrix.os == 'ubuntu-24.04' && matrix.node-version == '24'",
-    );
+  ])
+    expect(shared.run).toContain(command);
+  for (const command of ['bun run test', 'npm run pack:check']) {
+    const step = job.steps.find((step) => step.run === command)!;
+    expect(step).toBeDefined();
+    expect(step.if).toBeUndefined();
   }
-  for (const run of ['bun run typecheck', 'bun run test', 'npm run pack:check']) {
-    expect(steps.find((step) => step.run === run)?.if).toBeUndefined();
+});
+
+test('downstream release stages tolerate skipped ancestors but require successful direct gates', () => {
+  const ctx = context();
+  ctx.needs['prepare-validation'].result = 'skipped';
+  ctx.needs['prepare-publication'].outputs.reused = 'false';
+  for (const name of ['validate-release-pr', 'merge-release-pr', 'validate-tag']) {
+    const condition = releaseWorkflow.jobs[name].if!;
+    expect(evaluate(condition, ctx, false, false).coerceString()).toBe('true');
+    expect(jobEnabled(name, ctx, true)).toBe(false);
+  }
+  for (const result of ['failure', 'cancelled', 'skipped']) {
+    ctx.needs.release.result = result;
+    expect(jobEnabled('validate-release-pr', ctx)).toBe(false);
+    expect(jobEnabled('merge-release-pr', ctx)).toBe(false);
+    ctx.needs['prepare-publication'].result = result;
+    expect(jobEnabled('validate-tag', ctx)).toBe(false);
   }
 });
 
