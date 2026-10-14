@@ -48,18 +48,36 @@ a patch release PR. Ordinary Git history records every commit regardless.
    or a changed revision prevent the merge. Only the same-repository Release Please
    PR targeting main, authored by github-actions[bot] and labeled
    `autorelease: pending`, is eligible. Ordinary PRs still require normal review.
-4. After merging, the workflow explicitly dispatches Release on main, validates
-   the resulting event SHA and creates a plain numeric tag (for example `0.2.3`)
-   and a GitHub Release. GITHUB_TOKEN merges do not trigger push workflows, so this
-   dispatch is required. npm publication validates and checks the tagged archive
-   when configured. These checks cover the generated PR, merged revision and
-   packaged release; only the duplicate main-push validation is removed.
+4. After merging, the workflow explicitly dispatches Release on main with the
+   source run, validated PR SHA and resulting merge SHA. It reuses validation only
+   when the event SHA equals that merge SHA, the source Release run completed
+   successfully, and its validation artifact records an identical Git tree.
+   Different content or unavailable evidence runs the full matrix again. Release
+   then creates a plain numeric tag (for example `0.2.3`) and a GitHub Release.
+   GITHUB_TOKEN merges do not trigger push workflows, so this dispatch is required.
+5. npm publication requires validation evidence for the exact tagged commit and
+   tree. It can use the current run or a successful prior Release run, including
+   a tag-only retry. Missing or expired evidence triggers full reusable validation
+   of the tag's resolved SHA. Publication checks that the tag still identifies
+   that SHA, checks the version and real package archive, and compares registry
+   integrity before publishing. Typecheck and behavior tests are not repeated in
+   the publication job.
+
+Reusable validation stores a small SHA/tree artifact only after the entire
+Linux/Windows matrix succeeds. Artifacts include repository, run and attempt
+identity and are retained for 90 days. Identical post-merge content gets a new
+receipt for its merge SHA. Failed/cancelled runs, other workflows, other branches
+and fork repositories cannot supply reusable evidence. Manual continuation inputs
+select evidence; they never authorize skipping checks on their own.
+Formatting, corpus, Python helper and version checks run once on Linux Node 24;
+typecheck, behavior tests and package checks keep the full platform matrix.
 
 Reusable validation has separate concurrency groups for each caller run/ref;
 release stages cannot cancel one another. Release executions remain serialized,
 with running executions protected from cancellation. A manual `publish_tag` retry
-skips main validation and Release Please entirely, validates the requested existing
-tag and retries publication only. It must be dispatched from main.
+skips main validation and Release Please entirely and retries only the requested
+existing tag. It reuses successful validation when available, otherwise validates
+that tag with the full matrix. It must be dispatched from main.
 
 The generated skip marker is limited to release commits. A branch rule requiring
 standalone PR checks that the marker skips would leave the release PR pending and

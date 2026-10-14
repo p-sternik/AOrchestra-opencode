@@ -16,7 +16,7 @@ test.skipIf(process.platform === 'win32')(
       );
       const inline = workflow
         .split('      - name: Merge validated release PR and continue release\n        run: |\n')[1]
-        ?.split('\n  publish-npm:')[0];
+        ?.split('\n  prepare-publication:')[0];
       expect(inline).toBeDefined();
       const script = inline!
         .split('\n')
@@ -33,7 +33,7 @@ if(args.includes('PUT')){
   if(!args.includes('sha='+process.env.PR_HEAD_SHA)||!args.includes('merge_method=squash'))process.exit(9);
   if(process.env.SCENARIO==='merge-failed'||process.env.SCENARIO==='head-race')process.exit(1);
 }else if(process.env.SCENARIO==='identity-changed')process.exit(1);
-console.log('ok');
+console.log(args.includes('PUT')?'c'.repeat(40):'ok');
 `,
       );
       await chmod(join(root, 'gh'), 0o755);
@@ -51,6 +51,7 @@ console.log('ok');
             ...process.env,
             PATH: `${root}:${process.env.PATH}`,
             GITHUB_REPOSITORY: 'owner/repo',
+            GITHUB_RUN_ID: '123',
             PR_NUMBER: '12',
             PR_HEAD_SHA: scenario === 'invalid-sha' ? '' : 'a'.repeat(40),
             CALL_LOG: log,
@@ -83,6 +84,12 @@ console.log('ok');
             'owner/repo',
             '--ref',
             'main',
+            '-f',
+            'source_run=123',
+            '-f',
+            'validated_sha=' + 'a'.repeat(40),
+            '-f',
+            'merged_sha=' + 'c'.repeat(40),
           ]);
         if (calls.length >= 2) expect(calls[1]).toContain('sha=' + 'a'.repeat(40));
       }
@@ -235,7 +242,13 @@ const context = (event = 'push', tag?: string, result = 'success', created = 'tr
   inputs: tag === undefined ? {} : { publish_tag: tag },
   vars: { NPM_PUBLISH_ENABLED: 'true' },
   needs: {
+    'prepare-validation': { result: 'success', outputs: { reused: 'false' } },
     'validate-main': { result, outputs: {} },
+    'prepare-publication': {
+      result: 'success',
+      outputs: { reused: 'true', tag: tag || '0.6.0', sha: 'a'.repeat(40) },
+    },
+    'validate-tag': { result: 'skipped', outputs: {} },
     release: {
       result,
       outputs: {
@@ -316,14 +329,14 @@ test('tag retries skip main and Release Please while publishing only the request
   expect(jobEnabled('validate-main', retry)).toBe(false);
   expect(jobEnabled('release', retry)).toBe(false);
   expect(jobEnabled('merge-release-pr', retry)).toBe(false);
-  expect(jobEnabled('publish-npm', retry)).toBe(true);
-  expect(expand(releaseWorkflow.jobs['publish-npm'].env!.RELEASE_TAG, retry)).toBe('0.5.0');
+  expect(jobEnabled('prepare-publication', retry)).toBe(true);
+  expect(expand(releaseWorkflow.jobs['prepare-publication'].env!.RELEASE_TAG, retry)).toBe('0.5.0');
   const branchRetry = context('workflow_dispatch', '0.5.0', 'skipped');
   branchRetry.github.ref = 'refs/heads/feature';
   expect(jobEnabled('validate-main', branchRetry)).toBe(false);
   expect(jobEnabled('release', branchRetry)).toBe(false);
-  expect(jobEnabled('publish-npm', branchRetry)).toBe(false);
-  expect(jobEnabled('publish-npm', context('push', '0.5.0', 'skipped'))).toBe(false);
+  expect(jobEnabled('prepare-publication', branchRetry)).toBe(false);
+  expect(jobEnabled('prepare-publication', context('push', '0.5.0', 'skipped'))).toBe(false);
 });
 
 test('publication fails closed on failed, cancelled, absent or disabled ordinary releases', () => {
@@ -331,25 +344,29 @@ test('publication fails closed on failed, cancelled, absent or disabled ordinary
     const normal = context(event);
     expect(jobEnabled('validate-main', normal)).toBe(true);
     expect(jobEnabled('release', normal)).toBe(true);
-    expect(jobEnabled('publish-npm', normal)).toBe(true);
-    expect(jobEnabled('publish-npm', context(event, undefined, 'success', 'false'))).toBe(false);
+    expect(jobEnabled('prepare-publication', normal)).toBe(true);
+    expect(jobEnabled('prepare-publication', context(event, undefined, 'success', 'false'))).toBe(
+      false,
+    );
     for (const result of ['failure', 'cancelled', 'skipped'])
-      expect(jobEnabled('publish-npm', context(event, undefined, result))).toBe(false);
+      expect(jobEnabled('prepare-publication', context(event, undefined, result))).toBe(false);
   }
   const disabled = context();
   disabled.vars.NPM_PUBLISH_ENABLED = 'false';
-  expect(jobEnabled('publish-npm', disabled)).toBe(false);
-  expect(jobEnabled('publish-npm', context(), true)).toBe(false);
-  expect(jobEnabled('publish-npm', context('workflow_dispatch', '0.5.0', 'skipped'), true)).toBe(
+  expect(jobEnabled('prepare-publication', disabled)).toBe(false);
+  expect(jobEnabled('prepare-publication', context(), true)).toBe(false);
+  expect(
+    jobEnabled('prepare-publication', context('workflow_dispatch', '0.5.0', 'skipped'), true),
+  ).toBe(false);
+  expect(jobEnabled('prepare-publication', context('workflow_dispatch', '0.5.0', 'failure'))).toBe(
     false,
   );
-  expect(jobEnabled('publish-npm', context('workflow_dispatch', '0.5.0', 'failure'))).toBe(false);
   expect(jobEnabled('release', context('push', undefined, 'failure'))).toBe(false);
   expect(jobEnabled('validate-main', context('workflow_dispatch', ''))).toBe(true);
-  expect(jobEnabled('publish-npm', context('workflow_dispatch', ''))).toBe(true);
+  expect(jobEnabled('prepare-publication', context('workflow_dispatch', ''))).toBe(true);
   const disabledRetry = context('workflow_dispatch', '0.5.0', 'skipped');
   disabledRetry.vars.NPM_PUBLISH_ENABLED = 'false';
-  expect(jobEnabled('publish-npm', disabledRetry)).toBe(false);
+  expect(jobEnabled('prepare-publication', disabledRetry)).toBe(false);
 });
 
 test('only obsolete PR checks share a cancellable concurrency group', () => {
@@ -392,4 +409,77 @@ test('generated release skip marker retains explicit SHA validation and its merg
   missing.needs.release.outputs['pr-number'] = '';
   expect(jobEnabled('validate-release-pr', missing)).toBe(false);
   expect(jobEnabled('merge-release-pr', missing)).toBe(false);
+});
+
+test('release accepts skipped main validation only with successful tree evidence', () => {
+  const ctx = context();
+  ctx.needs['prepare-validation'].outputs.reused = 'true';
+  ctx.needs['validate-main'].result = 'skipped';
+  expect(jobEnabled('validate-main', ctx)).toBe(false);
+  expect(jobEnabled('release', ctx)).toBe(true);
+  ctx.needs['prepare-validation'].outputs.reused = 'false';
+  expect(jobEnabled('release', ctx)).toBe(false);
+  ctx.needs['prepare-validation'].outputs.reused = 'true';
+  for (const result of ['failure', 'cancelled', 'skipped']) {
+    ctx.needs['prepare-validation'].result = result;
+    expect(jobEnabled('release', ctx)).toBe(false);
+  }
+  expect(jobEnabled('release', context(), true)).toBe(false);
+});
+
+test('publication requires reusable evidence or successful full tag validation', () => {
+  const ctx = context();
+  expect(jobEnabled('validate-tag', ctx)).toBe(false);
+  expect(jobEnabled('publish-npm', ctx)).toBe(true);
+  ctx.needs['prepare-publication'].outputs.reused = 'false';
+  expect(jobEnabled('validate-tag', ctx)).toBe(true);
+  expect(jobEnabled('publish-npm', ctx)).toBe(false);
+  ctx.needs['validate-tag'].result = 'success';
+  expect(jobEnabled('publish-npm', ctx)).toBe(true);
+  for (const result of ['failure', 'cancelled']) {
+    ctx.needs['validate-tag'].result = result;
+    expect(jobEnabled('publish-npm', ctx)).toBe(false);
+  }
+  ctx.needs['validate-tag'].result = 'skipped';
+  ctx.needs['prepare-publication'].outputs.reused = 'true';
+  for (const result of ['failure', 'cancelled', 'skipped']) {
+    ctx.needs['prepare-publication'].result = result;
+    expect(jobEnabled('publish-npm', ctx)).toBe(false);
+  }
+  expect(jobEnabled('publish-npm', context(), true)).toBe(false);
+  const commands = releaseWorkflow.jobs['publish-npm'].steps!.map((step) => step.run);
+  expect(commands).not.toContain('bun run typecheck');
+  expect(commands).not.toContain('bun run test');
+  expect(commands).toContain('npm run pack:check');
+  expect(releaseWorkflow.jobs['validate-tag'].with!.ref).toContain('outputs.sha');
+  expect(validateWorkflow.jobs.receipt.needs).toBe('validate');
+});
+
+test('shared checks run once while platform tests and packaging retain the full matrix', () => {
+  const steps = validateWorkflow.jobs.validate.steps! as Array<{ run?: string; if?: string }>;
+  for (const run of [
+    'npm run format:check',
+    'bun run eval:check',
+    "python -m unittest discover -s tests -p '*_test.py'",
+    'bun scripts/version-check.ts',
+  ]) {
+    expect(steps.find((step) => step.run === run)?.if).toBe(
+      "matrix.os == 'ubuntu-24.04' && matrix.node-version == '24'",
+    );
+  }
+  for (const run of ['bun run typecheck', 'bun run test', 'npm run pack:check']) {
+    expect(steps.find((step) => step.run === run)?.if).toBeUndefined();
+  }
+});
+
+test('receipts are enabled by reusable inputs because calls retain the caller event', () => {
+  const call = validateWorkflow.on.workflow_call as {
+    inputs: { record_validation: { description: string; type: string; default: boolean } };
+  };
+  expect(call.inputs.record_validation).toEqual({
+    description: 'Store evidence after the complete validation matrix succeeds',
+    type: 'boolean',
+    default: true,
+  });
+  expect(validateWorkflow.jobs.receipt.if).toBe('inputs.record_validation');
 });

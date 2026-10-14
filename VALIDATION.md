@@ -698,3 +698,27 @@ OpenCode 2.0.26. They do not establish live TUI interaction, Windows process-tre
 termination, every accepted V2 runtime, real provider inference or coding
 correctness. No paid evaluation, release or npm publication ran. Published npm
 0.8.1 does not contain the first-launch flow.
+
+## Reusing release validation
+
+Local Linux checks on 2026-10-14, based on main v0.9.0: **201 harness tests
+passed (1,376 assertions)** and **29 Python tests** passed, including ten new
+release-evidence tests. Typecheck, formatting, evaluation corpus and version
+checks passed. Production package installation, plugin import, CLI help and
+packaged TUI rendering passed. Actionlint 1.7.12 accepted both workflows.
+
+Tests execute the merge/dispatch commands with a recording GitHub CLI and evaluate
+actual workflow expressions. They cover skipped dependencies, failed/cancelled
+validation and publication gates. Evidence fixtures cover identical trees with
+different commit SHAs, changed merge content, exact tagged commits, lightweight
+and annotated tags, repository/workflow/branch identity, run attempts, expired or
+mismatched artifacts, API failures and pagination. Successful older-tag retries
+can supply evidence even when the workflow's main SHA differs from the tag.
+Reusable calls retain their caller's event, so receipt generation is enabled by
+a workflow input and waits for the entire matrix to succeed.
+
+These checks do not execute GitHub's scheduler or artifact transport, confirm
+cross-run receipt reuse on a live release, or exercise npm OIDC publication.
+Windows runners and actual duration savings remain unverified locally. The next
+release must confirm the continuation and publication fast paths; missing evidence
+runs full validation. No paid evaluation, tag modification or publication ran.
