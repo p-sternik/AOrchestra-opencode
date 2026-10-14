@@ -936,3 +936,44 @@ all six proposed observation rows are unrun and INCONCLUSIVE. No provider infere
 new economics measurement, experimental production routing or isolation claim
 is made. The exact remaining evidence is listed in the
 [foundation reconciliation](docs/real-model-core-validation.md#minimal-architecture-foundation-reconciliation-2026-10-14).
+
+## Worker report normalization, 2026-10-14
+
+The parent now receives only the five validated worker report fields in canonical
+order. Extra text remains in the native child trajectory. Reports exceeding 16,000
+characters after normalization fail with `WORKER_REPORT_TOO_LARGE` before review;
+evidence and `OPEN` are never partially truncated. The existing error path blocks
+that task without automatically retrying or revoking a valid sibling result.
+Acceptance still requires fresh native predicates and compatibility review.
+
+Observed checks on Linux Bun 1.2.15: **236 tests PASS, 1,751 assertions**;
+typecheck, **29 Python tests**, development/holdout corpus validation, changed-file
+formatting and local documentation links PASS. The full suite includes the native
+filesystem symlink regression that failed under Windows Bun on a WSL UNC path
+during the preceding audit. Repository smoke PASS on OpenCode 2.0.28 with
+**modelCalls: 0**. New regressions cover normalization, duplicate/missing fields,
+the exact report limit, oversized sibling failure and continued acceptance gating.
+
+These checks establish protocol behavior using controlled child responses, not
+provider-backed report usability, complete real-model delegation or cost savings.
+No provider inference ran. SELECTIVE, optional untracked DIRECT work and native
+permission/snapshot boundaries remain as documented in the
+[technical reference](docs/reference.md#how-it-works).
+
+## Fast lookup exploration default, 2026-10-14
+
+Primary instructions now default unknown repository locations, definitions,
+callers and dependencies to bounded read-only fast lookups before broad search.
+Concrete located fragments remain direct reads for diagnosis, edits and checks.
+Initial lookups precede exclusive change tasks; explicit user restrictions,
+unavailable capabilities, configured budgets, active exclusive tasks and shell-only
+lookups retain an explained DIRECT fallback. Candidate search roots do not require
+broad primary inspection before delegation.
+
+This changes instruction policy and the primary agent description, not native
+admission or tool permissions. Typecheck, **236 tests / 1,751 assertions**, changed
+instruction/config/document formatting and diff checks PASS. Repository smoke on
+OpenCode 2.0.28 PASS with **modelCalls: 0**. Controlled tests establish existing
+lookup admission, scope and acceptance boundaries; actual model compliance with
+the new routing preference and whole-workflow cost savings remain UNVERIFIED.
+No provider inference or global installation configuration update ran.

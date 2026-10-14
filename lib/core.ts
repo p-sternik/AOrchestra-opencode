@@ -235,13 +235,14 @@ export function verifierPassed(
 export function parseResult(text: string): {
   status: 'COMPLETE' | 'PARTIAL' | 'BLOCKED';
   evidence: string;
+  fields: Record<'STATUS' | 'RESULT' | 'EVIDENCE' | 'CHANGED' | 'OPEN', string>;
   text: string;
 } {
-  const fields = ['STATUS', 'RESULT', 'EVIDENCE', 'CHANGED', 'OPEN'];
+  const fields = ['STATUS', 'RESULT', 'EVIDENCE', 'CHANGED', 'OPEN'] as const;
   const map = new Map<string, string>();
   for (const line of text.split(/\r?\n/)) {
     const match = /^([A-Z]+):\s*(.*)$/.exec(line);
-    if (!match || !fields.includes(match[1])) continue;
+    if (!match || !fields.some((field) => field === match[1])) continue;
     if (map.has(match[1])) throw new Error('DUPLICATE_RESULT_FIELD');
     map.set(match[1], match[2].trim());
   }
@@ -250,10 +251,16 @@ export function parseResult(text: string): {
   if (!['COMPLETE', 'PARTIAL', 'BLOCKED'].includes(status!)) throw new Error('INVALID_STATUS');
   if (status === 'COMPLETE' && (map.get('OPEN') !== 'none' || map.get('EVIDENCE') === 'none'))
     throw new Error('UNSUPPORTED_COMPLETE');
+  const normalized = fields.map((field) => `${field}: ${map.get(field)!}`).join('\n');
+  if (normalized.length > 16000) throw new Error('WORKER_REPORT_TOO_LARGE');
   return {
     status: status as 'COMPLETE' | 'PARTIAL' | 'BLOCKED',
     evidence: map.get('EVIDENCE')!,
-    text,
+    fields: Object.fromEntries(fields.map((field) => [field, map.get(field)!])) as Record<
+      (typeof fields)[number],
+      string
+    >,
+    text: normalized,
   };
 }
 

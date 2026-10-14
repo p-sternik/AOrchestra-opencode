@@ -1291,7 +1291,7 @@ export default Plugin.define({
                 `VERIFIERS (primary runs any shell checks)\n${JSON.stringify(taskVerifiers(target))}`,
                 input.delta ? `RETRY DELTA\n${input.delta}` : '',
                 input.escalationReason ? `ESCALATION REASON\n${input.escalationReason}` : '',
-                'Return STATUS, RESULT, EVIDENCE, CHANGED, OPEN exactly once as FIELD: value lines. All fields need values. STATUS: COMPLETE, PARTIAL or BLOCKED. RESULT: observed outcome. EVIDENCE: observed files, sources or native checks. CHANGED: exact paths or none. OPEN: remaining work or none. COMPLETE requires evidence for the entire supplied outcome and OPEN: none; unavailable primary validation remains OPEN and means PARTIAL. Your report does not accept the task.',
+                'Return STATUS, RESULT, EVIDENCE, CHANGED, OPEN exactly once as FIELD: value lines. Keep the complete report concise and within 16,000 characters, including field labels and newlines. All fields need values. STATUS: COMPLETE, PARTIAL or BLOCKED. RESULT: observed outcome. EVIDENCE: observed files, sources or native checks. CHANGED: exact paths or none. OPEN: remaining work or none. COMPLETE requires evidence for the entire supplied outcome and OPEN: none; unavailable primary validation remains OPEN and means PARTIAL. Your report does not accept the task.',
               ].join('\n\n');
               if (prompt.length > 48000) throw new Error('DELEGATION_PROMPT_TOO_LARGE');
               beginExecution(target);
@@ -1456,11 +1456,7 @@ export default Plugin.define({
                 controller.signal.throwIfAborted();
               });
               return {
-                content:
-                  text.slice(0, 16000) +
-                  (text.length > 16000
-                    ? '\n[Truncated; full result is in native child trajectory.]'
-                    : ''),
+                content: result.text,
                 metadata: {
                   childSessionID: child,
                   taskId: task.id,

@@ -133,18 +133,18 @@ an exact error; it does **not** infer complexity from the description. Every row
 actual **model strategy choice is UNVERIFIED**, because inference was not authorized.
 This separates policy defects from reasonable model judgment.
 
-| Scenario                                  | Expected useful strategy                        | Actual deterministic result                                            | Outcome/evidence                                                                     |
-| ----------------------------------------- | ----------------------------------------------- | ---------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
-| Trivial local change                      | DIRECT                                          | Explicit delegation remains permitted                                  | Unaccepted report; native trivial DIRECT edit/read/accept separately passes          |
-| Straightforward single-file bug           | DIRECT                                          | Explicit delegation remains permitted                                  | Admission passes; task-level model fix not executed                                  |
-| Read-only repository investigation        | DELEGATE when separation helps                  | Lookup + fast + read admitted without writes                           | Unaccepted read-only report                                                          |
-| Complex change, independent investigation | DELEGATE investigation                          | Independent analysis admitted                                          | Controlled separate contract; no model judgment claim                                |
-| Tightly coupled edits                     | DIRECT                                          | Single explicit delegate admitted; concurrent changes excluded         | Exclusivity regressions; semantic coupling remains primary responsibility            |
-| Context unavailable to proposed child     | DIRECT/retrieve or BLOCKED                      | Missing handoff rejected: `HANDOFF_REQUIRED`                           | No child/budget; populated but insufficient context cannot be inferred automatically |
-| Ordered dependencies                      | WAIT, then execute in order                     | `DEPENDENCY_UNMET` until prerequisite acceptance                       | No child; existing dependency/late-revocation regressions                            |
-| Unavailable M/T                           | DIRECT with capabilities or BLOCKED             | `MODEL_UNAVAILABLE` / `TOOL_UNAVAILABLE`; Code Mode-only tool rejected | No child/budget; native missing-model admission also passes                          |
-| Failed delegation                         | Inspect, repair/retry or escalate with evidence | `RUNTIME_FAILED`, blocked/error attempt                                | No successful report; retry/delta/tier and repair tests                              |
-| Complex wording, localized implementation | DIRECT                                          | Wording does not trigger forced delegation                             | Explicit bounded delegation admitted; usefulness remains model-dependent             |
+| Scenario                                  | Expected useful strategy                                      | Actual deterministic result                                            | Outcome/evidence                                                                     |
+| ----------------------------------------- | ------------------------------------------------------------- | ---------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| Trivial local change                      | DIRECT                                                        | Explicit delegation remains permitted                                  | Unaccepted report; native trivial DIRECT edit/read/accept separately passes          |
+| Straightforward single-file bug           | DIRECT                                                        | Explicit delegation remains permitted                                  | Admission passes; task-level model fix not executed                                  |
+| Read-only repository investigation        | DELEGATE fast lookup by default for unknown locations/callers | Lookup + fast + read admitted without writes                           | Unaccepted read-only report; model routing choice unverified                         |
+| Complex change, independent investigation | DELEGATE investigation                                        | Independent analysis admitted                                          | Controlled separate contract; no model judgment claim                                |
+| Tightly coupled edits                     | DIRECT                                                        | Single explicit delegate admitted; concurrent changes excluded         | Exclusivity regressions; semantic coupling remains primary responsibility            |
+| Context unavailable to proposed child     | DIRECT/retrieve or BLOCKED                                    | Missing handoff rejected: `HANDOFF_REQUIRED`                           | No child/budget; populated but insufficient context cannot be inferred automatically |
+| Ordered dependencies                      | WAIT, then execute in order                                   | `DEPENDENCY_UNMET` until prerequisite acceptance                       | No child; existing dependency/late-revocation regressions                            |
+| Unavailable M/T                           | DIRECT with capabilities or BLOCKED                           | `MODEL_UNAVAILABLE` / `TOOL_UNAVAILABLE`; Code Mode-only tool rejected | No child/budget; native missing-model admission also passes                          |
+| Failed delegation                         | Inspect, repair/retry or escalate with evidence               | `RUNTIME_FAILED`, blocked/error attempt                                | No successful report; retry/delta/tier and repair tests                              |
+| Complex wording, localized implementation | DIRECT                                                        | Wording does not trigger forced delegation                             | Explicit bounded delegation admitted; usefulness remains model-dependent             |
 
 The system intentionally permits delegation even in a DIRECT-preferred scenario.
 A nonempty routing reason is not a semantic proof of benefit. User constraints,
@@ -352,6 +352,12 @@ self-contained in global setup; this review does not hide them behind repository
 paths unavailable to an installed primary.
 
 ### SELECTIVE and orchestrator-first
+
+The subsequent fast-lookup policy update defaults unknown repository exploration
+to read-only fast delegation while retaining direct diagnosis/edit/test work on
+located code. The candidate comparison below describes the earlier review;
+instruction compliance and savings remain unverified. See
+[current validation](../VALIDATION.md#fast-lookup-exploration-default-2026-10-14).
 
 Candidate A retains current SELECTIVE: cohesive diagnosis/edit/test loops,
 overlapping changes and known reads may run DIRECT; separable investigation and

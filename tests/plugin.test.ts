@@ -2029,6 +2029,54 @@ test('group child failure preserves sibling results and releases slots', async (
   }
 });
 
+test('oversized worker report blocks only its task while a normalized sibling awaits verification', async () => {
+  const f = await fixture({ maxConcurrentAnalyses: 2 });
+  try {
+    await registerAnalyses(f, ['a', 'b']);
+    const context = f.ctx.session.context;
+    f.ctx.session.context = async (input, request) => {
+      const messages = await context(input, request);
+      for (const message of messages)
+        if (message.type === 'assistant')
+          message.content = [
+            {
+              type: 'text',
+              text:
+                input.sessionID === 'child-1'
+                  ? `STATUS: PARTIAL\nRESULT: ${'x'.repeat(16000)}\nEVIDENCE: api.ts\nCHANGED: none\nOPEN: primary validation`
+                  : 'debug trace\nOPEN: primary validation\nSTATUS: PARTIAL\nRESULT: investigated\nEVIDENCE: api.ts\nCHANGED: none\nextra text',
+            },
+          ];
+      return messages;
+    };
+    const results = JSON.parse(
+      (await f.invoke('aorchestra_delegate', { tasks: ['a', 'b'].map(delegateItem) })).content,
+    ).results;
+    expect(results[0].error).toBe('WORKER_REPORT_TOO_LARGE');
+    expect(results[0].content).toBe('');
+    expect(results[1].content).toBe(
+      'STATUS: PARTIAL\nRESULT: investigated\nEVIDENCE: api.ts\nCHANGED: none\nOPEN: primary validation',
+    );
+    expect(results[1].metadata).toMatchObject({
+      childSessionID: 'child-2',
+      workerStatus: 'PARTIAL',
+      accepted: false,
+    });
+    const state = await new Ledger(f.ctx.storage).read('primary');
+    expect(state.tasks.map((t) => t.status)).toEqual(['blocked', 'review']);
+    expect(f.creations).toHaveLength(2);
+    await expect(
+      f.invoke('aorchestra_task', {
+        operation: 'accept',
+        taskId: 'b',
+        compatibilityReview: 'Still requires native checks',
+      }),
+    ).rejects.toThrow('VERIFIER_MISSING_OR_STALE');
+  } finally {
+    await f.clean();
+  }
+});
+
 test('group parent cancellation and child timeouts interrupt every outstanding child', async () => {
   for (const timeout of [false, true]) {
     const f = await fixture({ maxConcurrentAnalyses: 3, ...(timeout ? { timeoutMs: 20 } : {}) });

@@ -25,7 +25,7 @@
   ],
   "agents": {
     "aorchestra": {
-      "description": "Own brownfield outcomes, perform cohesive work directly, delegate settled bounded tasks.",
+      "description": "Own brownfield outcomes, default unknown repository exploration to fast lookups, diagnose/edit/verify located code directly.",
       "mode": "primary",
       "steps": 30,
       "system": "{file:./instructions/aorchestra.md}",

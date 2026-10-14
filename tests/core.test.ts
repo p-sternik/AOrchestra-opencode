@@ -147,6 +147,30 @@ test('result protocol rejects empty evidence and does not accept contradictory C
     ).status,
   ).toBe('PARTIAL');
 });
+test('worker report normalizes only declared fields and preserves unresolved work', () => {
+  const result = parseResult(
+    'debug noise\nOPEN: tests not run\nCHANGED: none\nRESULT: inspected\nEVIDENCE: src/api.ts\nSTATUS: PARTIAL\ntrailing debug trace',
+  );
+  expect(result.fields.OPEN).toBe('tests not run');
+  expect(result.text).toBe(
+    'STATUS: PARTIAL\nRESULT: inspected\nEVIDENCE: src/api.ts\nCHANGED: none\nOPEN: tests not run',
+  );
+  expect(() => parseResult(`${result.text}\nOPEN: none`)).toThrow('DUPLICATE_RESULT_FIELD');
+  expect(() => parseResult(result.text.replace('CHANGED: none\n', ''))).toThrow(
+    'EMPTY_RESULT_FIELD',
+  );
+});
+test('worker report limit includes every normalized field without truncating OPEN', () => {
+  const prefix = 'STATUS: PARTIAL\nRESULT: ';
+  const suffix = '\nEVIDENCE: src/api.ts\nCHANGED: none\nOPEN: primary validation';
+  const report = prefix + 'x'.repeat(16000 - prefix.length - suffix.length) + suffix;
+  expect(parseResult(report).text).toBe(report);
+  expect(parseResult(report).fields.OPEN).toBe('primary validation');
+  expect(parseResult('noise'.repeat(4000) + '\n' + report).text).toBe(report);
+  expect(() => parseResult(report.replace('RESULT: ', 'RESULT: x'))).toThrow(
+    'WORKER_REPORT_TOO_LARGE',
+  );
+});
 test('dependencies require accepted tasks; registration rejects cycles by allowing older dependencies only', () => {
   const s = state();
   registerTask(s, task('producer'));

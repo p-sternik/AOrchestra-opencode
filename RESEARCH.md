@@ -57,6 +57,37 @@ These influences justify design choices; they do not prove performance transfer.
 Compare DIRECT and selective routing on the same historical tasks/models, with
 independent behavior/regression checks and whole-workflow cost measurements.
 
+## Research interpretation and evidence boundaries
+
+Reviewed publications support specific design hypotheses, not a universally optimal
+harness or a measured benefit for this OpenCode adaptation:
+
+- **CodeDelegator:** the 25.8% / 26.4% / 38.4% ReAct / CodeAct / CodeDelegator
+  comparison is MCPMark pass@1 with DeepSeekV3.2, not a tau-squared-bench result.
+  Its separate tau-squared-bench experiments and EPSS ablations motivate context
+  separation; they do not establish our selective routing policy's effectiveness.
+  [Paper, Tables 2–4](https://arxiv.org/html/2601.14914v1).
+- **AOrchestra:** the reported 16.28% relative improvement uses Gemini-3-Flash
+  across its evaluated benchmarks. Cost-aware ICL reduces average cost by 18.5%
+  while increasing GAIA pass@1 by 3.03 percentage points. Those results concern
+  the paper's policy and experiment, not this repository's tier configuration.
+  [Paper](https://arxiv.org/html/2602.03786v2).
+- **mini-SWE-agent:** approximately 100 lines describes the agent class, with
+  additional environment, model and runner code. The project's reported >74%
+  SWE-bench Verified score depends on its evaluated model/configuration; it is
+  not proof that every simpler harness outperforms a richer one.
+  [Author repository](https://github.com/SWE-agent/mini-swe-agent).
+
+Workers cannot execute host shell commands, but this does not make editable tests
+tamper-proof. Test changes can be legitimate task outputs and require primary diff
+review. Independent diagnostic assertions remain runner-owned and outside the
+worker's write scope. Snapshot-bound receipts establish freshness of observed
+checks over measured sources, not test completeness, semantic correctness or
+filesystem isolation. Untracked local DIRECT work uses ordinary native checks;
+formal harness acceptance applies only to registered tasks. Full provider-backed
+delegation and cost benefits still require the evidence described in
+[VALIDATION.md](VALIDATION.md).
+
 ## OpenCode 2.0.26 compatibility
 
 Configured local plugin paths must be directories. Relative paths resolve against

@@ -159,8 +159,10 @@ the server-reported version, installed-update text and request disposal.
 
 ## How it works
 
-The primary performs cohesive investigation/edit/test work directly. It delegates
-settled, bounded changes or independent analysis when the separation is useful.
+The primary defaults unknown repository locations, definitions, callers and
+dependencies to a bounded read-only fast lookup before broad exploration. It reads
+concrete located fragments directly for diagnosis, edits and verification, and
+delegates settled bounded changes when useful.
 Each delegation builds an instruction/context/tools/model contract for a fresh
 native child session. There is no additional agent runtime or mandatory planner,
 reviewer or model-powered summarizer.
@@ -251,7 +253,12 @@ the same task only if another call is authorized. Rejected input spends no child
 attempt but does not grant retry authorization. Existing model, permission,
 provenance, scope and acceptance checks still apply. Worker report instructions
 use STATUS: COMPLETE, PARTIAL or BLOCKED, plus RESULT, EVIDENCE, CHANGED and OPEN;
-COMPLETE requires observed evidence and OPEN: none.
+COMPLETE requires observed evidence and OPEN: none. The parent receives only these
+five validated fields in their declared order; other text stays in the native child
+trajectory. The normalized report, including labels and newlines, must fit 16,000
+characters. An oversized report fails with WORKER_REPORT_TOO_LARGE before review,
+rather than truncating evidence or unresolved work. It does not trigger an automatic
+retry or accept the task.
 
 ```json
 {
@@ -263,11 +270,23 @@ COMPLETE requires observed evidence and OPEN: none.
 ```
 
 For research, `analysisMode: lookup` permits fast fact extraction; synthesis
-requires balanced/strong. One known lookup normally stays DIRECT. Main-model
+requires balanced/strong. A concrete file plus symbol, line range or exact patch
+target with a specific read purpose stays DIRECT. Knowing a filename alone does
+not make caller/dependency exploration a known-fragment read. Initial lookups use
+kind analysis, analysisMode lookup, empty writePaths and available read/grep/glob
+tools; candidate search roots suffice for the handoff. Run them before starting
+exclusive change work, independently check decisive references and accept them
+before editing. Required search stays DIRECT when delegation is explicitly
+restricted, fast/tools are unavailable, configured budgets or active exclusive work
+prevent admission, or shell is required; the primary explains the reason. This is
+model-facing instruction policy, not a deterministic tool router or a measured
+cost-saving claim. Main-model
 capability is separate from worker tiers: delegate a bounded strong investigation
 or deliberately change the main model when direct reasoning exceeds it.
 
-The default remains two attempts. Same-tier and one-tier retries require delta
+Attempts and delegations are unlimited by default; configure positive integer
+maxAttempts and maxDelegations limits explicitly when needed. Omitted or null
+limits are unlimited. Same-tier and one-tier retries require delta
 and routing evidence; fast-to-strong additionally requires `escalationReason`:
 reasoning-gap, compatibility-risk, security-risk or weak-verification. Downgrades
 are rejected. Missing permissions/tools are blockers rather than model-escalation
