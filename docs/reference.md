@@ -1,6 +1,8 @@
 # Technical reference
 
 For installation and everyday use, start with the [README](../README.md).
+For executable orchestration evidence and remaining model-dependent gaps, read the
+[core audit](core-orchestration-audit.md).
 
 ## Global installation
 
@@ -187,6 +189,17 @@ Native child-session permissions default to deny. Workers receive selected tools
 and exact edit paths. Workers do not receive shell; the primary runs verification
 through native tools. Analysis/verification workers have a known read-tool
 allowlist. Native edits by the primary are also checked during tracked work.
+Workers receive direct-callable leaf tools only; Code Mode and tools exposed only
+through Code Mode are rejected. The current native model catalog, variant and
+declared tool support are checked before reservation. Catalog availability does
+not establish provider health or task suitability. The primary sees configured
+tier references and their current availability.
+
+Native grep authorizes patterns rather than each matching file's read access.
+Worker search roots and structured grep match paths are checked for sensitive or
+outside-project paths before results are delivered. A rejected search should be
+narrowed to permitted source files. This protects returned content; it does not
+prevent ripgrep from locally scanning a sensitive file during a broad search.
 
 The instructions favor the nearest existing implementation, project conventions,
 small replacements, reuse and removal of obsolete code within the requested scope.
@@ -197,6 +210,14 @@ These are model instructions; tests still establish behavior and compatibility.
 A registered task includes `id`, `kind`, `instruction`, `context`, `dependsOn`,
 `writePaths`, `preserve` and `verifiers`. Dependencies refer to earlier registered
 tasks. Write paths are exact relative filenames rather than globs.
+The complete synthesized delegation prompt is capped at 48,000 characters before
+reservation; oversized contracts fail explicitly without truncating constraints.
+This is a character bound, not a guarantee about a model's context window.
+Accepted prerequisite IDs are included in the child prompt; the primary supplies
+relevant prerequisite outcomes in the handoff. A selected tool missing from the
+effective native child request is an explicit failure. A child can enter review
+only after a succeeded native outcome and a current, uncancelled attempt; review
+still requires primary verification and acceptance.
 
 Every delegation also requires a bounded `handoff`, supplied on registration or
 on the delegate call (including for an older stored task). Its `sources` distinguish
@@ -205,6 +226,32 @@ observed references from candidates, with an explicit revision or `unknown`;
 appropriate, but a source/search target is required. The handoff is capped at 12k
 characters and sent to the child with a runtime source-snapshot fingerprint.
 Neither a supplied revision nor the fingerprint proves the facts are current.
+
+Supply `tools` as an array of unique native leaf tool IDs and `handoff` as an
+object with the four required arrays. The harness rejects JSON-encoded field
+strings with `TOOLS_ARRAY_REQUIRED` or `HANDOFF_OBJECT_REQUIRED`; it does not
+decode them implicitly. Omitting `handoff` reuses the registered value. An explicit
+invalid override, including null, is rejected. Source-entry and handoff-array
+errors identify the field and expected shape. Missing/unknown delegation fields
+also fail before child creation or attempt reservation.
+
+For an already registered `analysisMode: lookup` task with a valid handoff:
+
+```json
+{
+  "taskId": "lookup",
+  "model": "fast",
+  "tools": ["read"],
+  "routingEvidence": "Bounded source lookup"
+}
+```
+
+After an argument rejection, inspect task status and correct the named field on
+the same task only if another call is authorized. Rejected input spends no child
+attempt but does not grant retry authorization. Existing model, permission,
+provenance, scope and acceptance checks still apply. Worker report instructions
+use STATUS: COMPLETE, PARTIAL or BLOCKED, plus RESULT, EVIDENCE, CHANGED and OPEN;
+COMPLETE requires observed evidence and OPEN: none.
 
 ```json
 {
@@ -293,17 +340,23 @@ does not execute operations or reset budgets, receipts or acceptance rules.
 Status returns `tokenBudget` (`limit`, `consumed`, `remaining`, `nearLimit` and
 `warningTokens`) for the primary native session. These are cumulative session usage
 counters, including reasoning and cache, not the size of the current request or
-context window. OpenCode manages context limits and compaction.
+context window. OpenCode manages context limits and compaction. The bundled config
+enables automatic compaction. The compaction hook preserves task identity, status,
+dependencies and repair counters without reinserting the full workflow event history
+or verification plans; those remain in native storage and are available through
+status/resume. Compaction never resets usage or operation counters.
+Existing numeric operation limits remain effective; remove them or set them to `null`
+to allow continued work. Retries still require new evidence and repairs still require
+an explicit reason and fresh verification.
 
-`maxSessionTokens` is an optional positive integer usage hard limit; omitted or
-`null` disables the hard stop. Existing explicit numeric values retain their
-per-session spending semantics for both primary and executor sessions. They are
-not a whole-workflow cost cap. At the limit, dispatch fails with
-`SESSION_TOKEN_BUDGET_EXCEEDED`. Existing installations with a numeric value must
-remove it or set it to `null` to disable that safeguard.
+`maxSessionTokens` is a legacy advisory usage threshold (positive integer or `null`),
+retained for configuration and status compatibility. It never blocks primary or
+executor dispatch, including when an existing numeric value is exceeded.
+`tokenBudget.limit` and `remaining` describe that advisory threshold, not available
+context capacity or permission to continue. No configuration migration is needed.
 
 `sessionUsageWarningTokens` is a positive integer warning threshold, default
-300,000 without a hard limit, or 80% of an explicit limit rounded up. Primary and
+300,000 without a legacy threshold, or 80% of that threshold rounded up. Primary and
 executor context hooks warn about spending at that threshold without blocking.
 Absent counters keep consumed/remaining/nearLimit unknown; an unlimited budget
 also has unknown remaining capacity. Reporting retains measured zero.
@@ -365,10 +418,10 @@ receipts collected before repair are cleared.
 If invalidation removed the baseline, entering repair records a new one and
 consumes the same durable repair budget.
 
-Set `maxRepairs` in plugin options (positive integer, default **2**). When another
+Set `maxRepairs` in plugin options to a positive integer for an explicit hard limit.
+Omitted or `null` means unlimited, as for `maxAttempts` and `maxDelegations`. When another
 repair would exceed it, the task returns `blocked`; start, invalidation and plugin
-restart do not reset that budget. This is independent of `maxAttempts` (**2** by
-default) and `maxDelegations`. Enter repair before editing a task in verification
+restart do not reset that budget. This is independent of `maxAttempts` and `maxDelegations`. Enter repair before editing a task in verification
 or retrying its child. A retry still requires `delta`, tier evidence and existing
 escalation/budget checks. Successful runtime execution alone does not consume a
 repair or accept the task.
@@ -482,6 +535,13 @@ code search. The skill has `autoinvoke: false` and the namespaced native ID
 default.
 Global skill discovery remains enabled for other agents; existing explicit user
 exclusions are preserved. Repository AGENTS.md instructions still apply.
+
+The primary's shipped policy allows `external_directory` access to the installed
+package's `skills/repo-context` and `skills/improve` directories under
+`node_modules/aorchestra-opencode-v2`. This covers native skill loading and their
+reference files when the package is outside the project. Other external directories
+still require approval. Setup migrates exact previous shipped defaults; customized
+ordered policies remain intact.
 
 ## Metrics and improvement reports
 
@@ -610,6 +670,20 @@ The packaged CLI exposes the same check as `aorchestra check`, with optional
 `--project=/path`. Package registrations are checked against native source metadata;
 the skill must come from the actually loaded package rather than the CLI cache.
 
+The delegation foundation checks reuse the native runner without inference:
+
+```sh
+bun scripts/core-check.ts --delegation-proof
+bun scripts/prepare-delegation-proof.ts
+```
+
+The first checks the diagnostic wrapper's actual native tool registration and
+rejected-call limit. The second prepares a source snapshot, independent fixture
+and effective native preflight; it sends no prompt and refuses to overwrite an
+existing preparation. The [foundation protocol](real-model-core-validation.md#delegation-foundation-preparation-2026-10-14)
+defines its authorization boundary and evidence requirements. Provider execution
+still needs fresh approval of the prepared manifest.
+
 Opt-in real-model evaluation:
 
 ```sh
@@ -666,6 +740,10 @@ normalizes output to visible tokens (excluding reasoning) and input to uncached
 tokens, so total tokens sum input, output, reasoning, cache-read and cache-write.
 Costs are native counter estimates, not provider invoices. An interrupted attempt
 can retain known usage but has incomplete lifecycle coverage.
+CLI timeout first sends SIGINT to request native interruption, with a five-second
+cleanup grace before SIGKILL. Streamed output survives timeout; the attempt still
+fails with `CLI_TIMEOUT`. This does not guarantee provider cancellation or terminal
+flush; see the [execution limits](benchmark.md#matched-execution).
 
 Independent behavior, original fixture regression and scope checks determine verified success; telemetry's
 native success alone never proves it. Observed cost sums attempts whose complete
@@ -681,13 +759,11 @@ The synthetic corpus is a limited brownfield baseline, not representative legacy
 
 ## Limits
 
-- Default budgets: eight delegations per primary session, two attempts per task,
-  two repair cycles per task, ten minutes per delegation and a 300k cumulative usage warning
-  without a default hard session-token limit. Explicit token limits
-  are safeguards, not measured optimal thresholds or a hard whole-ticket dollar cap.
-  The session-token limit uses the same total as usage reports: uncached input,
-  visible output, reasoning, cache-read and cache-write. It is checked before the
-  next model dispatch for both primary and executor; one response can cross it.
+- Default budgets: unlimited delegations, attempts and repair cycles,
+  ten minutes per delegation and a 300k cumulative usage warning
+  without a session-token hard stop. Legacy numeric token thresholds are advisory.
+  Usage includes uncached input, visible output, reasoning, cache-read and cache-write.
+  Neither accumulated usage nor a warning stops primary or executor dispatch.
 - Source snapshots include untracked files, do not traverse symlinks and exclude
   secrets, `.git`, `.opencode`, `node_modules`, `.cache`, plus root `coverage`,
   `dist` and `build`. Those root exclusions can hide meaningful files in unusual

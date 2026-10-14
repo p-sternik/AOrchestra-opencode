@@ -118,9 +118,13 @@ of global installation. Do not claim a check that was not observed.
 ## Bundled improvement skill
 
 The package also registers `aorchestra-improve` with automatic invocation disabled.
-Setup upgrades exact ordered v0.5.0 default permissions to allow this ID for primary
-AOrchestra, alongside recognized legacy defaults. Customized ordered policies and
+Setup upgrades exact ordered v0.5.0 and v0.9.0 default permissions, alongside
+recognized legacy defaults. Primary AOrchestra allows this skill ID and external
+directory access to the installed package's two bundled skill directories under
+`node_modules/aorchestra-opencode-v2/skills`. Customized ordered policies and
 project-local configuration remain intact. If a custom policy denies skills, add
-an exact allow rule for this ID only when the user wants to use it. No broad skill
-or shell permission is required. See the
+an exact allow rule for this ID only when the user wants to use it. If it asks for
+external-directory access, add the shipped directory-specific allow rules after
+the general `external_directory` rule. No broad skill, external-directory or shell
+permission is required. See the
 [improvement process](reference.md#reviewing-harness-improvements).

@@ -15,6 +15,7 @@ import {
 import shippedTemplate from '../opencode.json';
 import oldPermissions from '../lib/primary-permissions-v0.json';
 import v050Permissions from '../lib/primary-permissions-v050.json';
+import v090Permissions from '../lib/primary-permissions-v090.json';
 import { removeTemporary, supportedRuntime, assertRuntime } from '../scripts/runtime';
 test('runtime compatibility accepts newer stable V2 releases and rejects unsupported versions', () => {
   for (const version of [
@@ -279,6 +280,29 @@ test('setup upgrades exact v0.5.0 defaults and preserves custom improvement skil
   for (const prior of [
     v050Permissions.slice().reverse(),
     [...v050Permissions, { action: 'skill', resource: 'aorchestra-improve', effect: 'deny' }],
+    [],
+  ]) {
+    const result = primaryPermissions(prior, shippedTemplate.agents.aorchestra.permissions);
+    expect(result.rules).toEqual(prior);
+    expect(result.customized).toBe(true);
+  }
+});
+
+test('setup upgrades exact v0.9.0 defaults for bundled skill directories and preserves custom policies', () => {
+  const before =
+    '// retained\n' + JSON.stringify({ agents: { aorchestra: { permissions: v090Permissions } } });
+  const after = mergeSetup(before, shippedTemplate, 'aorchestra-opencode-v2@1.2.3', models);
+  expect(readConfig(after).agents.aorchestra.permissions).toEqual(
+    shippedTemplate.agents.aorchestra.permissions,
+  );
+  expect(
+    primaryPermissions(v090Permissions, shippedTemplate.agents.aorchestra.permissions).customized,
+  ).toBe(false);
+  expect(after).toContain('// retained');
+  expect(mergeSetup(after, shippedTemplate, 'aorchestra-opencode-v2@1.2.3', models)).toBe(after);
+  for (const prior of [
+    v090Permissions.slice().reverse(),
+    [...v090Permissions, { action: 'external_directory', resource: '*', effect: 'deny' }],
     [],
   ]) {
     const result = primaryPermissions(prior, shippedTemplate.agents.aorchestra.permissions);

@@ -119,8 +119,16 @@ Configured settings alone do not prove provider/model availability or identical
 provider behavior.
 
 Defaults are one repetition (use at least three for exploratory comparisons),
-600 seconds per CLI attempt, 10 seconds for independent assertions, 30 primary
+600 seconds before CLI interruption, 10 seconds for independent assertions, 30 primary
 steps, 24 executor steps, eight delegations and two attempts per delegated task.
+At the CLI deadline the runner sends SIGINT so the native CLI can request session
+interruption, then sends SIGKILL if the process remains alive after a five-second
+cleanup grace. Partial stdout is retained and the attempt remains `CLI_TIMEOUT`
+even if interruption exits cleanly. Linux executable regressions verify the
+signal and fallback; provider terminal flushing, Windows signal behavior and
+process trees behind executable wrappers remain unverified. Missing native
+terminals still mean incomplete lifecycle coverage.
+
 Session usage has no default hard token cap; explicit numeric limits remain
 per-session safeguards. There is no whole-workflow dollar cap. Choose settings
 and stopping criteria before inference; every attempted run, including failures,

@@ -207,6 +207,69 @@ test('CLI failures preserve streamed partial trajectory for reconciliation', asy
   }
 });
 
+test.skipIf(process.platform === 'win32')(
+  'CLI timeout requests native interruption and preserves terminal output',
+  async () => {
+    const result = await timeoutFixture(
+      `process.on('SIGINT',()=>{console.log('native-interrupted');process.exit(130)});console.log('started');setInterval(()=>{},1000);`,
+    );
+    expect(result.error).toBe('CLI_TIMEOUT');
+    expect(result.output).toContain('started');
+    expect(result.output).toContain('native-interrupted');
+    expect(result.elapsed).toBeLessThan(5000);
+  },
+  10000,
+);
+
+test.skipIf(process.platform === 'win32')(
+  'CLI timeout force-terminates a process ignoring native interruption after bounded grace',
+  async () => {
+    const result = await timeoutFixture(
+      `process.on('SIGINT',()=>{});console.log('started');setInterval(()=>{},1000);setTimeout(()=>process.exit(0),9000);`,
+    );
+    expect(result.error).toBe('CLI_TIMEOUT');
+    expect(result.output).toContain('started');
+    expect(result.elapsed).toBeGreaterThanOrEqual(5000);
+    expect(result.elapsed).toBeLessThan(8500);
+  },
+  12000,
+);
+
+async function timeoutFixture(source: string) {
+  const { mkdtemp, writeFile, rm } = await import('node:fs/promises');
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+  const dir = await mkdtemp(join(tmpdir(), 'aorchestra-eval-timeout-'));
+  try {
+    const script = join(dir, 'fixture.js');
+    await writeFile(script, source);
+    const child = Bun.spawn(
+      [
+        process.execPath,
+        '-e',
+        `const {command}=await import(${JSON.stringify(fileURLToPath(new URL('../scripts/runtime.ts', import.meta.url)))});let output='',error=null;const started=Date.now();try{await command([${JSON.stringify(script)}],${JSON.stringify(dir)},500,process.env,chunk=>output+=chunk);}catch(e){error=e.message;}console.log(JSON.stringify({output,error,elapsed:Date.now()-started}));`,
+      ],
+      {
+        // Use the actual executable, not a PATH shim that may retain a child
+        // process and swallow signals sent to the shim itself.
+        env: { ...process.env, OPENCODE_BIN: process.execPath },
+        stdout: 'pipe',
+        stderr: 'pipe',
+      },
+    );
+    const [output, error, exit] = await Promise.all([
+      new Response(child.stdout).text(),
+      new Response(child.stderr).text(),
+      child.exited,
+    ]);
+    expect(error).toBe('');
+    expect(exit).toBe(0);
+    return JSON.parse(output) as { output: string; error: string | null; elapsed: number };
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+}
+
 test('native reconciliation exhausts boundary cursors and paginated telemetry without inference', async () => {
   const { readEvaluationUsage } = await import('../scripts/eval-usage');
   const { Telemetry } = await import('../lib/telemetry');

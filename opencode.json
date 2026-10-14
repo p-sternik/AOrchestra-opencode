@@ -13,8 +13,8 @@
           "strong": "github-copilot/gpt-5.6-sol"
         },
         "maxConcurrentAnalyses": 1,
-        "maxDelegations": 8,
-        "maxAttempts": 2,
+        "maxDelegations": null,
+        "maxAttempts": null,
         "timeoutMs": 600000,
         "maxSessionTokens": null,
         "sessionUsageWarningTokens": 300000,
@@ -74,7 +74,17 @@
         { "action": "shell", "resource": "git rev-parse", "effect": "allow" },
         { "action": "shell", "resource": "git rev-parse *", "effect": "allow" },
         { "action": "shell", "resource": "git push *", "effect": "deny" },
-        { "action": "external_directory", "resource": "*", "effect": "ask" }
+        { "action": "external_directory", "resource": "*", "effect": "ask" },
+        {
+          "action": "external_directory",
+          "resource": "**/node_modules/aorchestra-opencode-v2/skills/improve/**",
+          "effect": "allow"
+        },
+        {
+          "action": "external_directory",
+          "resource": "**/node_modules/aorchestra-opencode-v2/skills/repo-context/**",
+          "effect": "allow"
+        }
       ]
     },
     "aorchestra-executor": {
