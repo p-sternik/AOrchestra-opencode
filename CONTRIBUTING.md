@@ -8,7 +8,7 @@ model evaluation is opt-in and can incur provider costs.
 
 Run `npm run format` before submitting changes and `npm run format:check` to check
 formatting without writing files. Prettier is pinned in development dependencies;
-CI checks formatting on Windows and Linux. Dependencies, generated output and
+CI checks formatting once on Linux. Dependencies, generated output and
 local credentials are excluded through `.prettierignore` and `.gitignore`.
 `CHANGELOG.md` is excluded from Prettier because Release Please generates its
 entries; release PRs still run formatting checks for source and other documentation.
@@ -39,7 +39,8 @@ a patch release PR. Ordinary Git history records every commit regardless.
 1. Ordinary PRs run Validate on Windows and Linux. Updated PRs cancel their
    obsolete checks. Checkouts use the event's immutable SHA; reusable validation
    can supply another exact SHA. Standalone Validate does not run on main pushes.
-2. Merge changes into `main`. Release owns main validation and then creates or
+2. Merge changes into `main`. Ordinary pushes start validation directly, skipping
+   the continuation-only evidence lookup job. Release owns main validation and then creates or
    updates a Release Please PR. Generated release titles and commits include
    `[skip ci]`, suppressing the redundant approval-required PR workflow.
 3. Release explicitly calls reusable validation for the generated PR's immutable
@@ -52,6 +53,7 @@ a patch release PR. Ordinary Git history records every commit regardless.
    source run, validated PR SHA and resulting merge SHA. It reuses validation only
    when the event SHA equals that merge SHA, the source Release run completed
    successfully, and its validation artifact records an identical Git tree.
+   The evidence lookup job records the inherited receipt using its existing checkout.
    Different content or unavailable evidence runs the full matrix again. Release
    then creates a plain numeric tag (for example `0.2.3`) and a GitHub Release.
    GITHUB_TOKEN merges do not trigger push workflows, so this dispatch is required.
@@ -60,8 +62,9 @@ a patch release PR. Ordinary Git history records every commit regardless.
    a tag-only retry. Missing or expired evidence triggers full reusable validation
    of the tag's resolved SHA. Publication checks that the tag still identifies
    that SHA, checks the version and real package archive, and compares registry
-   integrity before publishing. Typecheck and behavior tests are not repeated in
-   the publication job.
+   integrity before publishing. Dependency installation, typecheck, behavior tests and consumer package tests
+   are not repeated in the publication job. The source-only package is packed
+   without dependencies or lifecycle scripts.
 
 Reusable validation stores a small SHA/tree artifact only after the entire
 Linux/Windows matrix succeeds. Artifacts include repository, run and attempt
@@ -69,8 +72,12 @@ identity and are retained for 90 days. Identical post-merge content gets a new
 receipt for its merge SHA. Failed/cancelled runs, other workflows, other branches
 and fork repositories cannot supply reusable evidence. Manual continuation inputs
 select evidence; they never authorize skipping checks on their own.
-Formatting, corpus, Python helper and version checks run once on Linux Node 24;
-typecheck, behavior tests and package checks keep the full platform matrix.
+Formatting, typecheck, corpus, Python helper and version checks run once on Linux
+Node 24. Behavior tests and consumer package checks run on two lanes: Windows
+Node 22 (the supported floor) and Linux Node 24/npm 12 (the publication toolchain).
+Bun is pinned identically in both lanes; Linux Node 22 is no longer a separate lane.
+Dependency installs prefer the existing npm download cache and skip audit/funding
+requests. A cache miss still performs the locked install.
 
 Reusable validation has separate concurrency groups for each caller run/ref;
 release stages cannot cancel one another. Release executions remain serialized,

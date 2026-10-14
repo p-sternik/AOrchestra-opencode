@@ -32,7 +32,7 @@ permissions:
 
 jobs:
   prepare-validation:
-    if: ${{ github.ref == 'refs/heads/main' && inputs.publish_tag == '' }}
+    if: ${{ github.ref == 'refs/heads/main' && inputs.publish_tag == '' && inputs.merged_sha != '' }}
     runs-on: ubuntu-24.04
     permissions:
       contents: read
@@ -52,17 +52,30 @@ jobs:
           VALIDATED_SHA: ${{ inputs.validated_sha }}
           MERGED_SHA: ${{ inputs.merged_sha }}
         run: python .github/scripts/release-validation.py main
+      - name: Record validation inherited from identical release PR tree
+        if: steps.evidence.outputs.reused == 'true'
+        run: python .github/scripts/release-validation.py record
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: steps.evidence.outputs.reused == 'true'
+        with:
+          name: validation-${{ github.sha }}-${{ github.run_attempt }}
+          path: validation.json
+          if-no-files-found: error
+          retention-days: 90
   validate-main:
     needs: prepare-validation
-    if: ${{ github.ref == 'refs/heads/main' && inputs.publish_tag == '' && needs.prepare-validation.outputs.reused != 'true' }}
+    if: >-
+      ${{ !cancelled() && github.ref == 'refs/heads/main' && inputs.publish_tag == '' &&
+          (needs.prepare-validation.result == 'skipped' || needs.prepare-validation.result == 'success') &&
+          needs.prepare-validation.outputs.reused != 'true' }}
     uses: ./.github/workflows/validate.yml
   release:
     needs: [prepare-validation, validate-main]
     if: >-
       ${{ !cancelled() && github.ref == 'refs/heads/main' && inputs.publish_tag == '' &&
-          needs.prepare-validation.result == 'success' &&
           (needs.validate-main.result == 'success' ||
-           (needs.validate-main.result == 'skipped' && needs.prepare-validation.outputs.reused == 'true')) }}
+           (needs.prepare-validation.result == 'success' && needs.validate-main.result == 'skipped' &&
+            needs.prepare-validation.outputs.reused == 'true')) }}
     runs-on: ubuntu-24.04
     permissions:
       contents: write
@@ -74,21 +87,6 @@ jobs:
       release_created: ${{ steps.release.outputs.release_created }}
       tag_name: ${{ steps.release.outputs.tag_name }}
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        if: needs.prepare-validation.outputs.reused == 'true'
-        with:
-          ref: ${{ github.sha }}
-          persist-credentials: false
-      - name: Record validation inherited from identical release PR tree
-        if: needs.prepare-validation.outputs.reused == 'true'
-        run: python .github/scripts/release-validation.py record
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        if: needs.prepare-validation.outputs.reused == 'true'
-        with:
-          name: validation-${{ github.sha }}-${{ github.run_attempt }}
-          path: validation.json
-          if-no-files-found: error
-          retention-days: 90
       - uses: googleapis/release-please-action@0dfd8538845b8e92600d271a895a5372865d4062 # v5
         id: release
         with:
@@ -106,14 +104,17 @@ jobs:
           echo "sha=$sha" >> "$GITHUB_OUTPUT"
   validate-release-pr:
     needs: release
-    if: ${{ needs.release.outputs.pr-number != '' }}
+    if: ${{ !cancelled() && needs.release.result == 'success' && needs.release.outputs.pr-number != '' }}
     uses: ./.github/workflows/validate.yml
     with:
       ref: ${{ needs.release.outputs.pr-head-sha }}
 
   merge-release-pr:
     needs: [release, validate-release-pr]
-    if: ${{ needs.release.outputs.pr-number != '' && inputs.publish_tag == '' }}
+    if: >-
+      ${{ !cancelled() && needs.release.result == 'success' &&
+          needs.validate-release-pr.result == 'success' &&
+          needs.release.outputs.pr-number != '' && inputs.publish_tag == '' }}
     runs-on: ubuntu-24.04
     permissions:
       contents: write
@@ -179,7 +180,7 @@ jobs:
 
   validate-tag:
     needs: prepare-publication
-    if: ${{ needs.prepare-publication.outputs.reused != 'true' }}
+    if: ${{ !cancelled() && needs.prepare-publication.result == 'success' && needs.prepare-publication.outputs.reused != 'true' }}
     uses: ./.github/workflows/validate.yml
     with:
       ref: ${{ needs.prepare-publication.outputs.sha }}
@@ -210,15 +211,12 @@ jobs:
           node-version: '24'
           registry-url: https://registry.npmjs.org
           package-manager-cache: false
-      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
-        with:
-          bun-version: '1.2.15'
-      - run: npm install --global npm@12.2.0 --ignore-scripts
-      - name: Check version matches tag
-        run: node -e 'if(require("./package.json").version!==process.env.RELEASE_TAG)process.exit(1)'
-      - run: npm ci --ignore-scripts
-      - run: bun scripts/version-check.ts
-      - run: npm run pack:check
+      - name: Prepare npm publication toolchain
+        run: |
+          npm install --global npm@12.2.0 --ignore-scripts --no-audit --no-fund
+          node -e 'if(require("./package.json").version!==process.env.RELEASE_TAG)process.exit(1)'
+      # The exact commit already passed consumer installation and package checks.
+      # This source-only package needs no dependencies or build to pack/publish.
       - name: Pack release and verify registry integrity
         id: registry
         run: |

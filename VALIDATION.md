@@ -722,3 +722,29 @@ cross-run receipt reuse on a live release, or exercise npm OIDC publication.
 Windows runners and actual duration savings remain unverified locally. The next
 release must confirm the continuation and publication fast paths; missing evidence
 runs full validation. No paid evaluation, tag modification or publication ran.
+
+## Leaner CI and publication
+
+Local Linux verification on 2026-10-14: the full Bun suite passed **202 tests**
+(1,392 assertions). After adding the ordinary-main fast path, all **12 release
+regressions** passed (134 assertions); typecheck passed after updating the fixture
+input type. All **29 Python tests**, formatting, actionlint, evaluation corpus and
+version checks passed. Consumer package installation, plugin import, CLI help and
+both TUI rendering modes passed. Packing an isolated copy of the packaged source
+without node_modules produced identical archive integrity with local npm 11.12.1.
+
+Validation now uses Windows/Node 22 and Linux/Node 24/npm 12, with shared static
+checks on Linux only. Ordinary main runs skip the continuation evidence lookup
+job. Publication retains exact-commit validation and archive integrity gates but
+omits Bun setup, project dependency installation and repeated consumer testing.
+These changes reduce scheduled work; elapsed-time savings, the revised Windows
+lane, GitHub skipped-job scheduling and npm 12/OIDC publication still require a
+live Actions run. No release or publication was performed locally.
+
+A follow-up removes the continuation's second checkout by recording/uploading its
+inherited receipt in the evidence lookup job. Release PR validation, merge and tag
+validation now use explicit cancellation and successful direct-dependency gates,
+so intentionally skipped ancestors do not impose an implicit success condition.
+All **13 release tests** (149 assertions), typecheck and actionlint passed locally.
+The expression tests exercise skipped-ancestor status but do not run GitHub's
+scheduler; live continuation and tag-retry confirmation remain outstanding.
