@@ -3,6 +3,13 @@
 Release Please maintains future entries from Conventional Commits. Earlier local
 iterations are described below for context; they are not historical Git tags.
 
+## [0.9.2](https://github.com/p-sternik/AOrchestra-opencode/compare/0.9.1...0.9.2) (2026-10-14)
+
+
+### Continuous Integration
+
+* streamline validation and release pipeline ([#28](https://github.com/p-sternik/AOrchestra-opencode/issues/28)) ([4489df0](https://github.com/p-sternik/AOrchestra-opencode/commit/4489df0aa7c8ecc37d423e86cd367788e8aa85db))
+
 ## [0.9.1](https://github.com/p-sternik/AOrchestra-opencode/compare/0.9.0...0.9.1) (2026-10-14)
 
 
